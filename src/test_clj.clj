@@ -145,13 +145,19 @@
                     In that case, that comparator's return value is returned, otherwise
                     returns 0."
   [comps arg1 arg2]
-  (loop [remaining-comps comps]
-    (if (empty? remaining-comps) 
-      0
-      (let [result ((first remaining-comps) arg1 arg2)]
-	(if (not= 0 result)
-	  result
-	  (recur (rest remaining-comps)))))))
+  (let [first-diff (first (drop-while #(zero? %) 
+				       (map #(% arg1 arg2) comps)))]
+    (if first-diff first-diff 0))
+
+
+   #_(loop [remaining-comps comps]
+	      (if (empty? remaining-comps) 
+		0
+		(let [result ((first remaining-comps) arg1 arg2)]
+		  (if (not= 0 result)
+		    result
+		    (recur (rest remaining-comps))))))
+  )
 
 (defn compare-deps [arg1 arg2]
   (let [dep1 (dependency arg1)
@@ -190,13 +196,11 @@
   (insert-before-after-tests
    (sort compare-tests-order tests)))
 
-
 (defn add-listener [listener]
   (if (map? listener) 
     (conj listeners listener)
     (throw (IllegalArgumentException. 
-	    (format "Argument should be a map (of keywords to functions). Got: %s" listener))))
-)
+	    (format "Argument should be a map (of keywords to functions). Got: %s" listener)))))
 
 (def log-listener
      {:onTestStart (fn [result] (println (format "Starting test %s" )))
