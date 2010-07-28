@@ -147,26 +147,16 @@
   [comps arg1 arg2]
   (let [first-diff (first (drop-while #(zero? %) 
 				       (map #(% arg1 arg2) comps)))]
-    (if first-diff first-diff 0))
+    (if first-diff first-diff 0))) ;turn nil into 0
 
-
-   #_(loop [remaining-comps comps]
-	      (if (empty? remaining-comps) 
-		0
-		(let [result ((first remaining-comps) arg1 arg2)]
-		  (if (not= 0 result)
-		    result
-		    (recur (rest remaining-comps))))))
-  )
-
-(defn compare-deps [arg1 arg2]
-  (let [dep1 (dependency arg1)
-        dep2 (dependency arg2)]
-    (if (and (not (nil? dep1))
-             (=  dep1 arg2)) ;run arg1 before arg2
+(defn compare-deps [test1 test2]
+  (let [dep1 (dependency test1)
+        dep2 (dependency test2)
+	isdep (fn [dep test] (and dep 
+			     (= dep test)))]
+    (if (isdep dep1 test2) ;run test1 before test2
       1
-      (if (and (not (nil? dep2))
-               (= dep2 arg1)) ;run arg2 before arg1
+      (if (isdep dep2 test1) ;run test2 before test1
         -1
         0))))
 
