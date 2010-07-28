@@ -30,7 +30,8 @@
                 :dependsOnTest #'test2}} 
   test3 [] 
   (do (println "running test3") 
-      (throw (RuntimeException. "test failed!")) (println "test3 complete")))
+      (throw (RuntimeException. "test failed!")) 
+      (println "test3 complete")))
 
 (defn ^{:test {:groups #{:group1 :group3} 
                 :dependsOnTest #'test3}} 
@@ -75,16 +76,17 @@
   [test results]
  
    
-  (let [dep (dependency test)
+  (let [dep (dependency test)]
 ;;	cell-listeners (fn [ltype] (doseq [listener listeners] ;todo - make this happen before and after
 ;;	((listener ltype) result)))
-	result (if (and (not= dep nil)
-			(not= ((results-map results) dep)
-			      :pass))
-		 :skip
-		 (try (test) 
-		      :pass
-		      (catch Exception e e)))]))
+	
+    (if (and (not= dep nil)   ;if the dependency didn't pass, skip this test
+	     (not= ((results-map results) dep)
+		   :pass))
+      :skip
+      (try (test) 
+	   :pass
+	   (catch Exception e e)))))
 
 (defn run-tests-matching "Runs all tests, in the coll of namespaces in nslist,
                          using the testfilter-fn to filter out any tests that 
@@ -99,8 +101,8 @@
 						    (map  ns-publics nslist)))))]
        (loop [remaining-tests tests 
 	      results []] 
-	 (let [test (first remaining-tests)] 
-	   (if (empty? remaining-tests) results
+	 (if (empty? remaining-tests) results	 
+	     (let [test (first remaining-tests)] 
 	       (recur 
 		(rest remaining-tests) 
 		(conj results {test (execute-test test results)}))))))))
@@ -132,8 +134,8 @@
 					;all the tests w beforeTest/afterTests
 					;all the after configs
     (concat (slice-by :beforeSuite :beforeNS)
-	    (apply concat (map #(concat before-tests [%] after-tests)
-				 plain-tests))
+	    (apply concat (map (fn [test] (concat before-tests [test] after-tests))
+			       plain-tests))
 	    (slice-by :afterSuite :afterNS))))
 
 (defn test? [myfn]
