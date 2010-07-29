@@ -1,4 +1,4 @@
-(ns test-clj)
+(ns test-clj.core)
 (def test? )
 (def sorted-tests nil)
 (def dependency nil)
@@ -6,58 +6,6 @@
 (def test2 nil)
 
 (def listeners (atom []))
-
-(defn ?n "Return a sensible default (y) if x is nil." 
-  [x y] (if x x y))
-
-					;sample tests
-					;------------------------------
-
-(defn ^{:test {:configuration :beforeSuite
-                 :groups #{:group1 :group2}}} 
-  config1 []
-  (do (println "running configuration1")
-      (println "configuration1 complete.")))
-
-(defn ^{:test {:groups #{:group1 :group2} 
-                :dependsOnTest #'test2}}
-  test1 [] 
-  (do (println "running test1") 
-      (println "test1 complete")))
-
-(defn ^{:test {:groups #{:group2 :group3}}} 
-  test2 [] 
-  (do(println "running test2")
-     (println "test2 complete"))) 
-
-(defn ^{:test {:groups #{:group2 :group3} 
-                :dependsOnTest #'test2}} 
-  test3 [] 
-  (do (println "running test3") 
-      (throw (RuntimeException. "test failed!")) 
-      (println "test3 complete")))
-
-(defn ^{:test {:groups #{:group1 :group3} 
-                :dependsOnTest #'test3}} 
-  test4 [] 
-  (do (println "running test4") 
-      ;;(throw (RuntimeException. "test failed!")) 
-      (println "test4 complete")))
-
-(defn ^{:test {:groups #{:group1 :group2}
-		:configuration :beforeTest}}
-  config5 [] 
-  (do (println "running configuration5") 
-      (println "configuration5 complete")))
-
-(defn ^{:test {:groups #{:group1 :group2}
-		:configuration :afterTest}}
-  config6 [] 
-  (do (println "running configuration6") 
-      (println "configuration6 complete")))
-
-					;end sample tests
-					;--------------------------------
 
 					;--- listener calls
 (defmulti test-end-notify  (fn [result test listener] [(class result) nil nil]))
@@ -145,7 +93,7 @@
                     In that case, that comparator's return value is returned, otherwise
                     returns 0."
   [comps arg1 arg2] 
-  (?n (first (drop-while zero? (map #(% arg1 arg2) comps))) 
+  (or (first (drop-while zero? (map #(% arg1 arg2) comps))) 
       0)) ;turn nil into 0
 
 (defn compare-deps [test1 test2]
