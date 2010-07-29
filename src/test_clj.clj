@@ -6,6 +6,10 @@
 (def test2 nil)
 
 (def listeners (atom []))
+
+(defn ?n "Return a sensible default (y) if x is nil." 
+  [x y] (if x x y))
+
 					;sample tests
 					;------------------------------
 
@@ -71,18 +75,16 @@
 (defn results-map [results] 
   (into {} results))
 
-(defn execute-test "Executes test, calls listeners, returns either :pass if the test exits normally,
- :skip if a dependency failed, or an exception the test threw." 
-  [test results]
- 
-   
+(defn execute-test "Executes test, calls listeners, returns either :pass
+                    if the test exits normally,
+                    :skip if a dependency failed, or an exception the test threw." 
+  [test results]    
   (let [dep (dependency test)]
 ;;	cell-listeners (fn [ltype] (doseq [listener listeners] ;todo - make this happen before and after
 ;;	((listener ltype) result)))
-	
-    (if (and (not= dep nil)   ;if the dependency didn't pass, skip this test
-	     (not= ((results-map results) dep)
-		   :pass))
+
+    (if (and dep (not= ((results-map results) dep)
+		       :pass))
       :skip
       (try (test) 
 	   :pass
@@ -91,14 +93,12 @@
 (defn run-tests-matching "Runs all tests, in the coll of namespaces in nslist,
                          using the testfilter-fn to filter out any tests that 
                          shouldn't be run.  Returns a map of test fn's to their result."
-  ([]
-     (run-tests-matching test? [*ns*])) ;by default run the tests in this ns
-  ([nslist]
-     (run-tests-matching test? nslist))
+  ([] (run-tests-matching test? [*ns*])) ;by default run the tests in current ns
+  ([nslist] (run-tests-matching test? nslist))
   ([testfilter nslist]
      (let [tests (sorted-tests (filter testfilter 
 				       (vals (apply concat
-						    (map  ns-publics nslist)))))]
+						    (map ns-publics nslist)))))]
        (loop [remaining-tests tests 
 	      results []] 
 	 (if (empty? remaining-tests) results	 
@@ -144,10 +144,9 @@
 (defn compare-using "Will run through the comparators, in order, until one finds a difference.
                     In that case, that comparator's return value is returned, otherwise
                     returns 0."
-  [comps arg1 arg2]
-  (let [first-diff (first (drop-while #(zero? %) 
-				       (map #(% arg1 arg2) comps)))]
-    (if first-diff first-diff 0))) ;turn nil into 0
+  [comps arg1 arg2] 
+  (?n (first (drop-while zero? (map #(% arg1 arg2) comps))) 
+      0)) ;turn nil into 0
 
 (defn compare-deps [test1 test2]
   (let [dep1 (dependency test1)
@@ -169,10 +168,9 @@
       :afterNS     2
       :afterSuite  3})
 
-(defn compare-configuration [arg1 arg2]
-  (let [conf1 (config-map (configuration arg1))
-        conf2 (config-map (configuration arg2))]
-    (- conf1 conf2)))
+(defn compare-configuration [test1 test2]
+  (reduce - (map (comp config-map configuration) 
+		 (list test1 test2))))
 
 (defn compare-tests-order [arg1 arg2]
 					;first check args are right type
