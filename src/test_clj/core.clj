@@ -1,10 +1,8 @@
-(ns test-clj.core)
-(def test? )
-(def sorted-tests nil)
-(def dependency nil)
-(def configuration nil)
-(def test2 nil)
+(ns test-clj.core
+  (:require [test-clj.meta :as meta]
+	    [test-clj.results :as results]))
 
+(def sorted-tests nil)
 (def listeners (atom []))
 
 					;--- listener calls
@@ -27,7 +25,7 @@
                     if the test exits normally,
                     :skip if a dependency failed, or an exception the test threw." 
   [test results]    
-  (let [dep (dependency test)]
+  (let [dep (meta/dependency test)]
 ;;	cell-listeners (fn [ltype] (doseq [listener listeners] ;todo - make this happen before and after
 ;;	((listener ltype) result)))
 
@@ -41,8 +39,8 @@
 (defn run-tests-matching "Runs all tests, in the coll of namespaces in nslist,
                          using the testfilter-fn to filter out any tests that 
                          shouldn't be run.  Returns a map of test fn's to their result."
-  ([] (run-tests-matching test? [*ns*])) ;by default run the tests in current ns
-  ([nslist] (run-tests-matching test? nslist))
+  ([] (run-tests-matching meta/test? [*ns*])) ;by default run the tests in current ns
+  ([nslist] (run-tests-matching meta/test? nslist))
   ([testfilter nslist]
      (let [tests (sorted-tests (filter testfilter 
 				       (vals (apply concat
@@ -55,24 +53,11 @@
 		(rest remaining-tests) 
 		(conj results {test (execute-test test results)}))))))))
 
-(defn dependency [test]
-  (-> (meta test) :test :dependsOnTest))
-
-(defn configuration [test]
-  (-> (meta test) :test :configuration))
-
-(defn in-group? [group myfn]
-  (contains? 
-   (->(meta myfn) :test :groups) 
-   group))
-
-(defn in-groups? [groups myfn]
-  (some #(in-group? % myfn) groups))
-
 (defn insert-before-after-tests [tests]
-  (let [filter-by (fn [config-type] (filter #(= (configuration %) config-type) tests))
-	slice-by (fn [suite ns] (take-while #(or (= (configuration %) suite )
-						 (= (configuration %) ns))  
+  (let [config meta/configuration
+	filter-by (fn [config-type] (filter #(= (config %) config-type) tests))
+	slice-by (fn [suite ns] (take-while #(or (= (config %) suite )
+						 (= (config %) ns))  
 					    tests))
 	before-tests (filter-by :beforeTest)   
 	after-tests (filter-by :afterTest)
@@ -85,9 +70,6 @@
 	    (apply concat (map (fn [test] (concat before-tests [test] after-tests))
 			       plain-tests))
 	    (slice-by :afterSuite :afterNS))))
-
-(defn test? [myfn]
-  (contains? (meta myfn) :test))
 
 (defn compare-using "Will run through the comparators, in order, until one finds a difference.
                     In that case, that comparator's return value is returned, otherwise

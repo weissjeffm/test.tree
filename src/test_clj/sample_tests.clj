@@ -9,7 +9,7 @@
       (println "configuration1 complete.")))
 
 (defn ^{:test {:groups #{:group1 :group2} 
-                :dependsOnTest #'test2}}
+                :dependsOnTests #'test2}}
   test1 [] 
   (do (println "running test1") 
       (println "test1 complete")))
@@ -20,14 +20,14 @@
      (println "test2 complete"))) 
 
 (defn ^{:test {:groups #{:group2 :group3} 
-                :dependsOnTest #'test2}} 
+                :dependsOnTests #'test2}} 
   test3 [] 
   (do (println "running test3") 
       (throw (RuntimeException. "test failed!")) 
       (println "test3 complete")))
 
 (defn ^{:test {:groups #{:group1 :group3} 
-                :dependsOnTest #'test3}} 
+                :dependsOnTests #'test3}} 
   test4 [] 
   (do (println "running test4") 
       ;;(throw (RuntimeException. "test failed!")) 
