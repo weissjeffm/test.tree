@@ -2,7 +2,7 @@
   (:require [test-clj.meta :as meta]
 	    [test-clj.results :as results]))
 
-(def sorted-tests nil)
+(def sort-tests nil)
 (def listeners (atom []))
 
 					;--- listener calls
@@ -14,7 +14,7 @@
    ((listener :onTestFail) test result))
 
 (defn test-start-notify [test listener] 
-  (let [configuration (configuration test)]
+  (let [configuration (meta/configuration test)]
     (cond () ())))
 					;--- end listener calls
 
@@ -36,15 +36,16 @@
 	   :pass
 	   (catch Exception e e)))))
 
+(defn gather-tests [testfilter nslist]
+  (->> nslist (map ns-publics) (apply concat) vals (filter testfilter)))
+
 (defn run-tests-matching "Runs all tests, in the coll of namespaces in nslist,
                          using the testfilter-fn to filter out any tests that 
                          shouldn't be run.  Returns a map of test fn's to their result."
   ([] (run-tests-matching meta/test? [*ns*])) ;by default run the tests in current ns
   ([nslist] (run-tests-matching meta/test? nslist))
   ([testfilter nslist]
-     (let [tests (sorted-tests (filter testfilter 
-				       (vals (apply concat
-						    (map ns-publics nslist)))))]
+     (let [tests (->> (gather-tests testfilter nslist) sort-tests)]
        (loop [remaining-tests tests 
 	      results []] 
 	 (if (empty? remaining-tests) results	 
@@ -79,8 +80,8 @@
       0)) ;turn nil into 0
 
 (defn compare-deps [test1 test2]
-  (let [dep1 (dependency test1)
-        dep2 (dependency test2)
+  (let [dep1 (meta/dependency test1)
+        dep2 (meta/dependency test2)
 	isdep (fn [dep test] (and dep 
 			     (= dep test)))]
     (if (isdep dep1 test2) ;run test1 before test2
@@ -89,30 +90,22 @@
         -1
         0))))
 
-(def config-map 
-     {:beforeSuite -3
-      :beforeNS    -2
-      :beforeTest  -1
-      nil          0
-      :afterTest   1
-      :afterNS     2
-      :afterSuite  3})
-
-(defn compare-configuration [test1 test2]
-  (reduce - (map (comp config-map configuration) 
+(defn compare-configuration "Compares two configuration functions to see which one should run first.
+                             For instance, beforeSuite runs before beforeNS.  Returns an integer
+                             representing the relative order of the two functions."
+  [test1 test2]
+  (reduce - (map (comp meta/config-map meta/configuration) 
 		 (list test1 test2))))
 
-(defn compare-tests-order [arg1 arg2]
-					;first check args are right type
-  (if (not (and (var? arg1) 
+(defn test-comparator [arg1 arg2]
+  (if (not (and (var? arg1) ;first check args are right type
                 (var? arg2)))
     (throw (IllegalArgumentException. 
 	    (format "Both arguments should be a var. Got: %s, %s" arg1 arg2))))
   (compare-using [compare-configuration compare-deps] arg1 arg2))
 
-(defn sorted-tests [tests] 
-  (insert-before-after-tests
-   (sort compare-tests-order tests)))
+(defn sort-tests [tests] 
+  (insert-before-after-tests (sort test-comparator tests)))
 
 (defn add-listener [listener]
   (if (map? listener) 

@@ -1,14 +1,23 @@
 (ns test-clj.meta)
 ;;deals with test metadata structures
 
-(defn- get-1stlvl-tag [tag]
+(def config-map 
+     {:beforeSuite -3
+      :beforeNS    -2
+      :beforeTest  -1
+      nil          0
+      :afterTest   1
+      :afterNS     2
+      :afterSuite  3})
+
+(defn- get-1stlvl-tag [test tag]
   (-> (meta test) :test tag))
 
 (defn dependency [test]
-  (get-1stlvl-tag :dependsOnTests))
+  (get-1stlvl-tag test :dependsOnTests))
 
 (defn configuration [test]
-  (get-1stlvl-tag :configuration))
+  (get-1stlvl-tag test :configuration))
 
 (defn in-group? [group myfn]
   (contains? 
