@@ -1,6 +1,7 @@
 (ns test-clj.core
   (:require [test-clj.meta :as meta]
-	    [test-clj.results :as results]))
+	    [test-clj.results :as results]
+	    [clojure.set :as set]))
 
 (def sort-tests nil)
 (def listeners (atom []))
@@ -78,6 +79,20 @@
 			       plain-tests))
 	    (slice-by :afterSuite :afterNS))))
 
+(defn in-dependency-chain?
+  "Returns true if target is in the dependency chain of test1"
+  ([test1 target] (in-dependency-chain? test1 target #{}))
+  ([test1 target deps-visited]
+     (let [deps1 (meta/dependencies test1)]
+       ;;(println (format "Is %s a dep of %s?" (:name (meta target)) (:name (meta test1))))
+       (cond 
+	(empty? deps1)   false 
+	(contains? deps1 target)   true 
+	(not (empty? (set/intersection deps1 deps-visited))) 
+	  (throw (IllegalStateException. (format "%s has a cyclic dependency." (:name (meta test1)))))
+	true	(some true? (map #(in-dependency-chain? % target (conj deps-visited test1))
+				 deps1))))))
+
 (defn compare-using "Will run through the comparators, in order, until one finds a difference.
                     In that case, that comparator's return value is returned, otherwise
                     returns 0."
@@ -86,6 +101,9 @@
       0)) ;turn nil into 0
 
 (defn compare-deps [test1 test2]
+					;crap, this does not fulfill the transitive requirement of a comparator.
+					;need to traverse the entire dependency chain, while checking for cyclic dependencies.  jweiss 7/29/10
+  
   (let [deps1 (meta/dependencies test1)
         deps2 (meta/dependencies test2)]
     (if (contains? deps1 test2) ;run test1 before test2

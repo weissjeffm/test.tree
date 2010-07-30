@@ -8,7 +8,8 @@
   (do (println "running configuration1")
       (println "configuration1 complete.")))
 
-(defn ^{:test {:groups #{:group2 :group3}}} 
+(defn ^{:test {:groups #{:group2 :group3}
+	       :dependsOnTests #'test4}} 
   test2 [] 
   (do(println "running test2")
      (println "test2 complete")))
