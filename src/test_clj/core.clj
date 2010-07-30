@@ -101,16 +101,11 @@
       0)) ;turn nil into 0
 
 (defn compare-deps [test1 test2]
-					;crap, this does not fulfill the transitive requirement of a comparator.
-					;need to traverse the entire dependency chain, while checking for cyclic dependencies.  jweiss 7/29/10
-  
-  (let [deps1 (meta/dependencies test1)
-        deps2 (meta/dependencies test2)]
-    (if (contains? deps1 test2) ;run test1 before test2
-      1
-      (if (contains? deps2 test1) ;run test2 before test1
-        -1
-        0))))
+  (if (in-dependency-chain? test2 test1) ;run test1 before test2
+    1
+    (if (in-dependency-chain? test1 test2) ;run test2 before test1
+      -1
+      0)))
 
 (defn compare-configuration "Compares two configuration functions to see which one should run first.
                              For instance, beforeSuite runs before beforeNS.  Returns an integer

@@ -1,15 +1,14 @@
 (ns test-clj.sample-tests)
 					;sample tests
 					;------------------------------
-
+(def test4 nil)
 (defn ^{:test {:configuration :beforeSuite
                  :groups #{:group1 :group2}}} 
   config1 []
   (do (println "running configuration1")
       (println "configuration1 complete.")))
 
-(defn ^{:test {:groups #{:group2 :group3}
-	       :dependsOnTests #'test4}} 
+(defn ^{:test {:groups #{:group2 :group3}}} 
   test2 [] 
   (do(println "running test2")
      (println "test2 complete")))
