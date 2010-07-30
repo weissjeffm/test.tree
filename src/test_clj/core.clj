@@ -17,28 +17,30 @@
   (let [configuration (meta/configuration test)]
     (cond () ())))
 					;--- end listener calls
-(defn dependencies-met? [test]
-  (let [deps (meta/dependencies test)]
-       ))
+(defn dependencies-met?
+  "Returns true if all the tests listed as dependencies for this test have passed."
+  [result-list test]
+  (every? #(results/passed? result-list (:fn %)) (results/dependencies result-list test)))
 
 (defn execute-test "Executes test, calls listeners, returns either :pass
                     if the test exits normally,
                     :skip if a dependency failed, or an exception the test threw." 
-  [test results]    
-  (let [dep (meta/dependencies test)]
-    ;;	cell-listeners (fn [ltype] (doseq [listener listeners] ;todo - make this happen before and after
-    ;;	((listener ltype) result)))
+  [test prev-results]    
+  
+  ;;	cell-listeners (fn [ltype] (doseq [listener listeners] ;todo - make this happen before and after
+  ;;	((listener ltype) result)))
       
-    (let [parameters   (meta/parameters test)
-	  test-result  {:startTime (System/currentTimeMillis)
-			:parameters parameters}]
-      (if (not (dependencies-met? test))
-	(assoc test-result :result :skip) 
-	(assoc  (try 
-		  (apply test parameters) 
-		  (assoc test-result :result :pass)
-		  (catch Exception e (assoc test-result :result e)))
-	  :endTime (System/currentTimeMillis))))))
+  (let [parameters   (meta/parameters test)
+	test-result  {:fn         test
+		      :startTime  (System/currentTimeMillis)
+		      :parameters parameters}]
+    (if (not (dependencies-met? prev-results test))
+      (assoc test-result :result :skip) 
+      (assoc (try 
+	       (apply test parameters)	;test fn is called here 
+	       (assoc test-result :result :pass)
+	       (catch Exception e (assoc test-result :result e)))
+	:endTime (System/currentTimeMillis)))))
 
 (defn gather-tests [testfilter nslist]
   (->> nslist (map ns-publics) (apply concat) vals (filter testfilter)))
@@ -56,7 +58,7 @@
 	     (let [test (first remaining-tests)] 
 	       (recur 
 		(rest remaining-tests) 
-		(conj results {test (execute-test test results)}))))))))
+		(conj results (execute-test test results)))))))))
 
 (defn insert-before-after-tests [tests]
   (let [config meta/configuration
