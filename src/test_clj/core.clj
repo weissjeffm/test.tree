@@ -17,24 +17,28 @@
   (let [configuration (meta/configuration test)]
     (cond () ())))
 					;--- end listener calls
-
-(defn results-map [results] 
-  (into {} results))
+(defn dependencies-met? [test]
+  (let [deps (meta/dependencies test)]
+       ))
 
 (defn execute-test "Executes test, calls listeners, returns either :pass
                     if the test exits normally,
                     :skip if a dependency failed, or an exception the test threw." 
   [test results]    
-  (let [dep (meta/dependency test)]
-;;	cell-listeners (fn [ltype] (doseq [listener listeners] ;todo - make this happen before and after
-;;	((listener ltype) result)))
-
-    (if (and dep (not= ((results-map results) dep)
-		       :pass))
-      :skip
-      (try (test) 
-	   :pass
-	   (catch Exception e e)))))
+  (let [dep (meta/dependencies test)]
+    ;;	cell-listeners (fn [ltype] (doseq [listener listeners] ;todo - make this happen before and after
+    ;;	((listener ltype) result)))
+      
+    (let [parameters   (meta/parameters test)
+	  test-result  {:startTime (System/currentTimeMillis)
+			:parameters parameters}]
+      (if (not (dependencies-met? test))
+	(assoc test-result :result :skip) 
+	(assoc  (try 
+		  (apply test parameters) 
+		  (assoc test-result :result :pass)
+		  (catch Exception e (assoc test-result :result e)))
+	  :endTime (System/currentTimeMillis))))))
 
 (defn gather-tests [testfilter nslist]
   (->> nslist (map ns-publics) (apply concat) vals (filter testfilter)))
@@ -80,13 +84,11 @@
       0)) ;turn nil into 0
 
 (defn compare-deps [test1 test2]
-  (let [dep1 (meta/dependency test1)
-        dep2 (meta/dependency test2)
-	isdep (fn [dep test] (and dep 
-			     (= dep test)))]
-    (if (isdep dep1 test2) ;run test1 before test2
+  (let [deps1 (meta/dependencies test1)
+        deps2 (meta/dependencies test2)]
+    (if (contains? deps1 test2) ;run test1 before test2
       1
-      (if (isdep dep2 test1) ;run test2 before test1
+      (if (contains? deps2 test1) ;run test2 before test1
         -1
         0))))
 

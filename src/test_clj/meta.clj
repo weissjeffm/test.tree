@@ -13,11 +13,22 @@
 (defn- get-1stlvl-tag [test tag]
   (-> (meta test) :test tag))
 
-(defn dependency [test]
-  (get-1stlvl-tag test :dependsOnTests))
+(defn dependencies [test]
+  (let [dep (get-1stlvl-tag test :dependsOnTests)]
+    (cond (nil? dep)  (hash-set)
+          (set? dep)  dep
+	  (var? dep)  (hash-set dep)
+	  true        (throw (RuntimeException.
+			      (format "Test %s has a dependency that isn't a var
+                                       reference to another test function, nor a set
+                                       of such functions." (:name (meta test))))))))
 
 (defn configuration [test]
   (get-1stlvl-tag test :configuration))
+
+(defn parameters [test]
+					;not implemented yet
+  )
 
 (defn in-group? [group myfn]
   (contains? 
