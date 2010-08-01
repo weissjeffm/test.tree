@@ -30,6 +30,11 @@
 					;not implemented yet
   )
 
+(defn test-name [test]
+  (format "%s/%s"
+	  (str (:ns (meta test)))
+	  (:name (meta test))))
+
 (defn in-group? [group myfn]
   (contains? 
    (->(meta myfn) :test :groups) 

@@ -7,16 +7,27 @@
 (def listeners (atom []))
 
 					;--- listener calls
-(defmulti test-end-notify  (fn [result test listener] [(class result) nil nil]))
+(defn notify [result test listener]
+  (let [resulttype (class result)
+	config (meta/configuration test)
+	config-events {:pass :onConfigurationFinish :skip onConfigurationSkip
+	event ]))
+(defmulti test-end-notify  (fn [result test listener] [(class result) (meta/configuration test) nil]))
 (defmethod test-end-notify [clojure.lang.Keyword nil nil] [result test listener]
-  (let [listener-map {:pass :onTestPass :skip :onTestSkip}]
-    ((listener (listener-map result)) test result)))
+	   (let [test-event-map {:pass :onTestFinish :skip :onTestSkip}
+		 configuration (meta/configuration test)]
+	     
+	     (cond (nil? configuration)	     
+		   ((listener (test-event-map result)) test result)
+		   true ())))
+(defmethod test-end-notify [java.lang.Throwable nil nil] [result test listener]
+   ((listener :onTestFail) test result))
 (defmethod test-end-notify [java.lang.Throwable nil nil] [result test listener]
    ((listener :onTestFail) test result))
 
 (defn test-start-notify [test listener] 
   (let [configuration (meta/configuration test)]
-    (cond () ())))
+    (cond (nil? configuration) ())))
 					;--- end listener calls
 (defn dependencies-met?
   "Returns true if all the tests listed as dependencies for this test have passed."
@@ -129,7 +140,3 @@
     (conj listeners listener)
     (throw (IllegalArgumentException. 
 	    (format "Argument should be a map (of keywords to functions). Got: %s" listener)))))
-
-(def log-listener
-     {:onTestStart (fn [result] (println (format "Starting test %s" )))
-      })
