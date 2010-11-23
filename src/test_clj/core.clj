@@ -7,11 +7,12 @@
 (def listeners (atom []))
 
 					;--- listener calls
-(defn notify [result test listener]
-  (let [resulttype (class result)
-	config (meta/configuration test)
-	config-events {:pass :onConfigurationFinish :skip onConfigurationSkip
-	event ]))
+;; (defn notify [result test listener]
+;;   (let [resulttype (class result)
+;; 	config (meta/configuration test)
+;; 	config-events {:pass :onConfigurationFinish :skip onConfigurationSkip
+;; 		       event ]))
+  
 (defmulti test-end-notify  (fn [result test listener] [(class result) (meta/configuration test) nil]))
 (defmethod test-end-notify [clojure.lang.Keyword nil nil] [result test listener]
 	   (let [test-event-map {:pass :onTestFinish :skip :onTestSkip}
@@ -22,8 +23,7 @@
 		   true ())))
 (defmethod test-end-notify [java.lang.Throwable nil nil] [result test listener]
    ((listener :onTestFail) test result))
-(defmethod test-end-notify [java.lang.Throwable nil nil] [result test listener]
-   ((listener :onTestFail) test result))
+
 
 (defn test-start-notify [test listener] 
   (let [configuration (meta/configuration test)]
@@ -60,8 +60,8 @@
 (defn run-tests-matching "Runs all tests, in the coll of namespaces in nslist,
                          using the testfilter-fn to filter out any tests that 
                          shouldn't be run.  Returns a map of test fn's to their result."
-  ([] (run-tests-matching meta/test? [*ns*])) ;by default run the tests in current ns
-  ([nslist] (run-tests-matching meta/test? nslist))
+  ([] (run-tests-matching meta/test? *ns*)) ;by default run the tests in current ns
+  ([&] (run-tests-matching meta/test? nslist))
   ([testfilter nslist]
      (let [tests (->> (gather-tests testfilter nslist) sort-tests)]
        (loop [remaining-tests tests 
@@ -101,8 +101,8 @@
 	(contains? deps1 target)   true 
 	(not (empty? (set/intersection deps1 deps-visited))) 
 	  (throw (IllegalStateException. (format "%s has a cyclic dependency." (:name (meta test1)))))
-	true	(some true? (map #(in-dependency-chain? % target (conj deps-visited test1))
-				 deps1))))))
+	:else (some #(in-dependency-chain? % target (conj deps-visited test1))
+		    deps1)))))
 
 (defn compare-using "Will run through the comparators, in order, until one finds a difference.
                     In that case, that comparator's return value is returned, otherwise

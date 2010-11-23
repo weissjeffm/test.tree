@@ -45,3 +45,5 @@
 
 (defn test? [myfn]
   (contains? (meta myfn) :test))
+
+(def testng-map

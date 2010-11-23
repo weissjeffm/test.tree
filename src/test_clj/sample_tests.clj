@@ -1,7 +1,7 @@
 (ns test-clj.sample-tests)
 					;sample tests
 					;------------------------------
-(def test4 nil)
+(declare test4)
 (defn ^{:test {:configuration :beforeSuite
                  :groups #{:group1 :group2}}} 
   config1 []
