@@ -1,4 +1,6 @@
-(ns test-clj.meta)
+(ns test-clj.meta
+  (:import [org.testng.annotations AfterClass AfterGroups AfterMethod AfterSuite AfterTest	 
+	    BeforeClass BeforeGroups BeforeMethod BeforeSuite BeforeTest Test])
 ;;deals with test metadata structures
 
 (def config-map 
@@ -47,3 +49,5 @@
   (contains? (meta myfn) :test))
 
 (def testng-map
+     {:beforeSuite BeforeSuite
+      :test Test})
