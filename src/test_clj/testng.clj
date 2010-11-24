@@ -1,4 +1,7 @@
-(ns test-clj.testng
+(ns
+    ^{:doc "Allows tests to be run under TestNG."
+      :author "Jeff Weiss"}
+  test-clj.testng
   (:use [test-clj.meta :only [test? configuration get-1stlvl-tag]])
   (:import [org.testng.annotations AfterClass AfterGroups AfterMethod AfterSuite AfterTest	 
 	    BeforeClass BeforeGroups BeforeMethod BeforeSuite BeforeTest Test]))
