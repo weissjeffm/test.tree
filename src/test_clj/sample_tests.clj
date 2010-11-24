@@ -1,10 +1,8 @@
 (ns test-clj.sample-tests
-  (:use [test-clj.meta :only [gen-classes]])
-  (:import [org.testng.annotations AfterClass AfterGroups AfterMethod AfterSuite AfterTest	 
-	    BeforeClass BeforeGroups BeforeMethod BeforeSuite BeforeTest Test]))
+  (:use [test-clj.testng :only [gen-class-testng]]))
 					;sample tests
 					;------------------------------
-(declare test4)
+
 (defn ^{:test {:configuration :beforeSuite
                  :groups #{:group1 :group2}}} 
   config1 [_]
@@ -50,6 +48,4 @@
 
 					;end sample tests
 					;--------------------------------
-;(gen-classes test-clj.sample-tests)
-
- (clojure.core/gen-class :prefix "" :name test_clj.sample_tests :methods [[^{org.testng.annotations.Test {:groups []}} test4 [] void] [^{org.testng.annotations.AfterMethod {:groups []}} config6 [] void] [^{org.testng.annotations.Test {:groups []}} test2 [] void] [^{org.testng.annotations.Test {:groups []}} test3 [] void] [^{org.testng.annotations.Test {:groups []}} test1 [] void] [^{org.testng.annotations.BeforeSuite {:groups []}} config1 [] void]])
+(gen-class-testng)

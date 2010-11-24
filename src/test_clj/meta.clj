@@ -1,6 +1,4 @@
-(ns test-clj.meta
-  (:import [org.testng.annotations AfterClass AfterGroups AfterMethod AfterSuite AfterTest	 
-	    BeforeClass BeforeGroups BeforeMethod BeforeSuite BeforeTest Test]))
+(ns test-clj.meta)
 ;;deals with test metadata structures
 
 (def config-map 
@@ -12,7 +10,7 @@
       :afterNS     2
       :afterSuite  3})
 
-(defn- get-1stlvl-tag [test tag]
+(defn get-1stlvl-tag [test tag]
   (-> (meta test) :test tag))
 
 (defn dependencies [test]
@@ -51,35 +49,4 @@
 (defn test? [myfn]
   (contains? (meta myfn) :test))
 
-(def testng-map
-     {:beforeSuite BeforeSuite
-      :beforeNS    BeforeClass
-      :beforeTest  BeforeMethod
-      :afterTest   AfterMethod
-      :afterNS     AfterClass
-      :afterSuite  AfterSuite
-      :test Test
-      })
-
-(comment (gen-class :name ^{Test {}} jeff
-		    :methods [[jefftest [] void]])
-
-	 (defmacro jeff [] `(defn ~(with-meta 'blah {:my :meta}) [] "hi")))
-
-(defn method-name [f]
-  (str (:name (meta f))))
-
-(defn group-ann-val [t]
-  (->> (meta t) :groups (map name) (into [])))
-
-(defn as-annotation [t]
-  {(if (configuration? t) (-> (configuration t) (testng-map)) Test) 
-   {:groups (group-ann-val t)}})
-
-(defmacro gen-classes [ns]
-  (let [publics (vals (ns-publics ns))
-	tests (filter test? publics)
-	methods (map (fn [test] (let [name (method-name test)]
-				  `[~(with-meta (symbol name) (as-annotation test)) [] ~'void])) tests)]
-    `(gen-class :prefix "" :name ~(symbol (namespace-munge ns)) :methods [~@methods])))
 
