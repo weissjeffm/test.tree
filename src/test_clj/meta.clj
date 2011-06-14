@@ -2,13 +2,13 @@
 ;;deals with test metadata structures
 
 (def config-map 
-     {:beforeSuite -3
-      :beforeNS    -2
-      :beforeTest  -1
-      nil          0
-      :afterTest   1
-      :afterNS     2
-      :afterSuite  3})
+     {:before-suite    -3
+      :before-group    -2
+      :before-test     -1
+      nil              0
+      :after-test      1
+      :after-group     2
+      :after-suite     3})
 
 (defn get-1stlvl-tag [test tag]
   (-> (meta test) :test tag))

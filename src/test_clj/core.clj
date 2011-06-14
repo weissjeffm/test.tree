@@ -1,10 +1,17 @@
 (ns test-clj.core
-  (:require [test-clj.meta :as meta]
-	    [test-clj.results :as results]
-	    [clojure.set :as set]))
+  (:require [clojure.set :as set]))
 
 (def sort-tests nil)
 (def listeners (atom []))
+(def config-map 
+     {:before-suite    -3
+      :before-group    -2
+      :before-test     -1
+      nil              0
+      :after-test      1
+      :after-group     2
+      :after-suite     3})
+
 
 					;--- listener calls
 ;; (defn notify [result test listener]
@@ -13,64 +20,65 @@
 ;; 	config-events {:pass :onConfigurationFinish :skip onConfigurationSkip
 ;; 		       event ]))
   
-(defmulti test-end-notify  (fn [result test listener] [(class result) (meta/configuration test) nil]))
-(defmethod test-end-notify [clojure.lang.Keyword nil nil] [result test listener]
-	   (let [test-event-map {:pass :onTestFinish :skip :onTestSkip}
-		 configuration (meta/configuration test)]
-	     
-	     (cond (nil? configuration)	     
-		   ((listener (test-event-map result)) test result)
-		   true ())))
-(defmethod test-end-notify [java.lang.Throwable nil nil] [result test listener]
+(comment (defmulti test-end-notify  (fn [result test listener] [(class result) (meta/configuration test) nil]))
+ (defmethod test-end-notify [clojure.lang.Keyword nil nil] [result test listener]
+   (let [test-event-map {:pass :onTestFinish :skip :onTestSkip}
+         configuration (meta/configuration test)]
+     
+     (cond (nil? configuration)	     
+           ((listener (test-event-map result)) test result)
+           true ())))
+ (defmethod test-end-notify [java.lang.Throwable nil nil] [result test listener]
    ((listener :onTestFail) test result))
 
 
-(defn test-start-notify [test listener] 
-  (let [configuration (meta/configuration test)]
-    (cond (nil? configuration) ())))
+ (defn test-start-notify [test listener] 
+   (let [configuration (meta/configuration test)]
+     (cond (nil? configuration) ()))))
 					;--- end listener calls
+(defn dependencies "Get the test set for all the dependencies of a test"
+  [all-tests test]
+  (let [test-deps (or (:depends-on test) {})]
+    (mapcat #(filter % all-tests) [ (fn [t] (some #{(:name t)} (:tests test-deps)))
+                                    (fn [t] (some (or (:groups t) #{}) (:groups test-deps)))])))
+
+(defn passed? [test]
+  (= :pass (:result test)))
+
 (defn dependencies-met?
   "Returns true if all the tests listed as dependencies for this test have passed."
-  [result-list test]
-  (every? #(results/passed? result-list (:fn %)) (results/dependencies result-list test)))
+  [test-list test]
+  (every? passed? (dependencies test-list test)))
 
 (defn execute-test "Executes test, calls listeners, returns either :pass
                     if the test exits normally,
                     :skip if a dependency failed, or an exception the test threw." 
-  [test prev-results]    
+  [test]    
   
+  (let [start-time  (System/currentTimeMillis)]
+    (assoc test
+      :result (try ((:procedure test))             ;test fn is called here 
+                   :pass
+                   (catch Exception e e)) 
+      :start-time start-time
+      :end-time (System/currentTimeMillis)))
   ;;	cell-listeners (fn [ltype] (doseq [listener listeners] ;todo - make this happen before and after
   ;;	((listener ltype) result)))
       
-  (let [parameters   (meta/parameters test)
-	test-result  {:fn         test
-		      :startTime  (System/currentTimeMillis)
-		      :parameters parameters}]
-    (if (not (dependencies-met? prev-results test))
-      (assoc test-result :result :skip) 
-      (assoc (try 
-	       (apply test parameters)	;test fn is called here 
-	       (assoc test-result :result :pass)
-	       (catch Exception e (assoc test-result :result e)))
-	:endTime (System/currentTimeMillis)))))
+  )
 
-(defn gather-tests [testfilter nslist]
-  (->> nslist (map ns-publics) (apply concat) vals (filter testfilter)))
-
-(defn run-tests-matching "Runs all tests, in the coll of namespaces in nslist,
-                         using the testfilter-fn to filter out any tests that 
-                         shouldn't be run.  Returns a map of test fn's to their result."
-  ([] (run-tests-matching meta/test? *ns*)) ;by default run the tests in current ns
-  ([&] (run-tests-matching meta/test? nslist))
-  ([testfilter nslist]
-     (let [tests (->> (gather-tests testfilter nslist) sort-tests)]
-       (loop [remaining-tests tests 
-	      results []] 
-	 (if (empty? remaining-tests) results	 
-	     (let [test (first remaining-tests)] 
-	       (recur 
-		(rest remaining-tests) 
-		(conj results (execute-test test results)))))))))
+(defn run-tests [tests] "Runs all tests in the coll tests.  Returns a
+                         vector of tests with results included."
+  (loop [remaining-tests tests 
+         finished-tests []] 
+    (if (empty? remaining-tests) finished-tests	 
+        (let [test (first remaining-tests)] 
+          (recur 
+           (rest remaining-tests) 
+           (conj finished-tests
+                 (if (dependencies-met? finished-tests test)
+                   (execute-test test)
+                   (assoc test :result :skip))))))))
 
 (defn insert-before-after-tests [tests]
   (let [config meta/configuration
@@ -126,8 +134,8 @@
 		 (list test1 test2))))
 
 (defn test-comparator [arg1 arg2]
-  (if (not (and (var? arg1) ;first check args are right type
-                (var? arg2)))
+  (if (not (and (map? arg1) ;first check args are right type
+                (map? arg2)))
     (throw (IllegalArgumentException. 
 	    (format "Both arguments should be a var. Got: %s, %s" arg1 arg2))))
   (compare-using [compare-configuration compare-deps] arg1 arg2))

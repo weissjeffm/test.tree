@@ -1,6 +1,5 @@
-(defproject test-clj "0.0.1"
+(defproject test-clj "0.0.1-SNAPSHOT"
 	  :description "A testNG like test harness for clojure"
 	  :dependencies [[org.clojure/clojure "1.2.0"]
 			 [org.clojure/clojure-contrib "1.2.0"]
-			 [org.clojars.weissjeffm/testng "5.14"] ]
-	  :dev-dependencies [[swank-clojure "1.2.1"]])
+			 [serializable-fn "1.1.0"] ])
