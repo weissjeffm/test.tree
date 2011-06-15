@@ -34,6 +34,15 @@
     (mapcat #(filter % all-tests) [ (fn [t] (some #{(:name t)} (:tests test-deps)))
                                     (fn [t] (some (or (:groups t) #{}) (:groups test-deps)))])))
 
+;;fns to manipulate lists of tests
+
+
+(defn before-tests [tests before-tests]
+  (apply interleave (conj (vec (map repeat before-tests)) tests)))
+
+(defn after-tests [tests before-tests]
+  (apply interleave (conj (list* (map repeat before-tests)) tests)))
+
 (defn passed? [test]
   (= :pass (:result test)))
 
@@ -72,23 +81,6 @@
                    (execute-test test)
                    (assoc test :result :skip))))))))
 
-(defn insert-before-after-tests [tests]
-  (let [config meta/configuration
-	filter-by (fn [config-type] (filter #(= (config %) config-type) tests))
-	slice-by (fn [suite ns] (take-while #(or (= (config %) suite )
-						 (= (config %) ns))  
-					    tests))
-	before-tests (filter-by :beforeTest)   
-	after-tests (filter-by :afterTest)
-	plain-tests (filter-by nil)]
-					;concat 3 sections together: 
-					;all the before configs,
-					;all the tests w beforeTest/afterTests
-					;all the after configs
-    (concat (slice-by :beforeSuite :beforeNS)
-	    (apply concat (map (fn [test] (concat before-tests [test] after-tests))
-			       plain-tests))
-	    (slice-by :afterSuite :afterNS))))
 
 (defn in-dependency-chain?
   "Returns true if target is in the dependency chain of test1"
@@ -104,39 +96,4 @@
 	:else (some #(in-dependency-chain? all-tests % target (conj deps-visited test1))
 		    deps1)))))
 
-(defn compare-using "Will run through the comparators, in order, until one finds a difference.
-                    In that case, that comparator's return value is returned, otherwise
-                    returns 0."
-  [comps arg1 arg2] 
-  (or (first (drop-while zero? (map #(% arg1 arg2) comps))) 
-      0)) ;turn nil into 0
 
-(defn compare-deps [test1 test2]
-  (if (in-dependency-chain? test2 test1) ;run test1 before test2
-    1
-    (if (in-dependency-chain? test1 test2) ;run test2 before test1
-      -1
-      0)))
-
-(defn compare-configuration "Compares two configuration functions to see which one should run first.
-                             For instance, beforeSuite runs before beforeNS.  Returns an integer
-                             representing the relative order of the two functions."
-  [test1 test2]
-  (reduce - (map (comp meta/config-map meta/configuration) 
-		 (list test1 test2))))
-
-(defn test-comparator [arg1 arg2]
-  (if (not (and (map? arg1) ;first check args are right type
-                (map? arg2)))
-    (throw (IllegalArgumentException. 
-	    (format "Both arguments should be a var. Got: %s, %s" arg1 arg2))))
-  (compare-using [compare-configuration compare-deps] arg1 arg2))
-
-(defn sort-tests [tests] 
-  (insert-before-after-tests (sort test-comparator tests)))
-
-(defn add-listener [listener]
-  (if (map? listener) 
-    (conj listeners listener)
-    (throw (IllegalArgumentException. 
-	    (format "Argument should be a map (of keywords to functions). Got: %s" listener)))))

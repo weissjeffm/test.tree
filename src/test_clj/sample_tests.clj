@@ -1,32 +1,49 @@
 (ns test-clj.sample-tests
   (:refer-clojure :exclude [fn])
-  (:require [clojure.contrib.logging :as log])
+  (:require [clojure.contrib.logging :as log]
+            [test-clj.core :as test])
   (:use [serializable.fn :only [fn]]))
 					;sample tests
 					;------------------------------
-(def sample-tests [{:name "config1"
-                    :configuration :before-suite
-                    :groups #{:group1 :group2}
-                    :procedure (fn []
-                                 (log/info "running configuration1")
-                                 (log/info "configuration1 complete."))}
 
-                   {:name "test2"
-                    :groups  #{:group2 :group3}
-                    :procedure (fn []
-                                 (log/info "running test2")
-                                 (log/info (str "Found config item" "blah"))
-                                 (log/info "test2 complete"))}
-                   {:name "test1"
-                    :description "tests the widget by flurbing the blob."
-                    :groups #{:group1 :group2}
-                    :depends-on {:tests #{"test2"} :groups #{:group4}}
-                    :procedure (fn []
-                                 (log/info "running test2")
-                                 (log/info (str "Found config item" "blah"))
-                                 (log/info "test2 complete"))}]
+(def login-before-test {:name "logout"
+                        :configuration true
+                        :groups #{:login}
+                        :procedure (fn []
+                                     (log/info "logging out")
+                                     (log/info "logout complete."))})
+
+(def login-after-test {:name "verify-user"
+                       :configuration true
+                       :groups #{:login}
+                       :procedure (fn []
+                                    (log/info "verifying user")
+                                    (log/info "verify complete."))})
+(def login-tests [{:name "config1"
+                   :configuration true
+                   :groups #{:blah}
+                   :procedure (fn []
+                                (log/info "running configuration1")
+                                (log/info "configuration1 complete."))}
+
+                  {:name "test2"
+                   :groups  #{:group2 :group3}
+                   :procedure (fn []
+                                (log/info "running test2")
+                                (log/info (str "Found config item" "blah"))
+                                (log/info "test2 complete"))}
+                  {:name "test1"
+                   :description "tests the widget by flurbing the blob."
+                   :groups #{:group1 :group2}
+                   :depends-on {:tests #{"test2"} :groups #{:group4}}
+                   :procedure (fn []
+                                (log/info "running test2")
+                                (log/info (str "Found config item" "blah"))
+                                (log/info "test2 complete"))}]
   )
 
+(defn all-login-tests []
+  (test/before-tests login-before-test login-tests))
 
 (comment (defn ^{:test {:configuration :beforeSuite
                 :groups #{:group1 :group2}}} 
