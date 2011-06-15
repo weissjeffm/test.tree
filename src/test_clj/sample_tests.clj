@@ -5,26 +5,26 @@
 					;sample tests
 					;------------------------------
 (def sample-tests [{:name "config1"
-                     :configuration :before-suite
-                     :groups #{:group1 :group2}
-                     :procedure (fn []
-                                  (log/info "running configuration1")
-                                  (log/info "configuration1 complete."))}
+                    :configuration :before-suite
+                    :groups #{:group1 :group2}
+                    :procedure (fn []
+                                 (log/info "running configuration1")
+                                 (log/info "configuration1 complete."))}
 
-                    {:name "test2"
-                     :groups  #{:group2 :group3}
-                     :procedure (fn []
-                                  (log/info "running test2")
-                                  (log/info (str "Found config item" "blah"))
-                                  (log/info "test2 complete"))}
-                    {:name "test1"
-                     :description "tests the widget by flurbing the blob."
-                     :groups #{:group1 :group2}
-                     :depends-on {:tests #{"test2"} :groups #{:group4}}
-                     :procedure (fn []
-                                  (log/info "running test2")
-                                  (log/info (str "Found config item" "blah"))
-                                  (log/info "test2 complete"))}]
+                   {:name "test2"
+                    :groups  #{:group2 :group3}
+                    :procedure (fn []
+                                 (log/info "running test2")
+                                 (log/info (str "Found config item" "blah"))
+                                 (log/info "test2 complete"))}
+                   {:name "test1"
+                    :description "tests the widget by flurbing the blob."
+                    :groups #{:group1 :group2}
+                    :depends-on {:tests #{"test2"} :groups #{:group4}}
+                    :procedure (fn []
+                                 (log/info "running test2")
+                                 (log/info (str "Found config item" "blah"))
+                                 (log/info "test2 complete"))}]
   )
 
 

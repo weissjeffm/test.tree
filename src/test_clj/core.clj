@@ -1,16 +1,8 @@
-(ns test-clj.core
-  (:require [clojure.set :as set]))
+(ns test-clj.core)
 
-(def sort-tests nil)
+
 (def listeners (atom []))
-(def config-map 
-     {:before-suite    -3
-      :before-group    -2
-      :before-test     -1
-      nil              0
-      :after-test      1
-      :after-group     2
-      :after-suite     3})
+
 
 
 					;--- listener calls
@@ -100,16 +92,16 @@
 
 (defn in-dependency-chain?
   "Returns true if target is in the dependency chain of test1"
-  ([test1 target] (in-dependency-chain? test1 target #{}))
-  ([test1 target deps-visited]
-     (let [deps1 (meta/dependencies test1)]
+  ([all-tests test1 target] (in-dependency-chain? all-tests test1 target #{}))
+  ([all-tests test1 target deps-visited]
+     (let [deps1 (set (map :name (dependencies all-tests test1)))]
        ;;(println (format "Is %s a dep of %s?" (:name (meta target)) (:name (meta test1))))
        (cond 
-	(empty? deps1)   false 
-	(contains? deps1 target)   true 
-	(not (empty? (set/intersection deps1 deps-visited))) 
-	  (throw (IllegalStateException. (format "%s has a cyclic dependency." (:name (meta test1)))))
-	:else (some #(in-dependency-chain? % target (conj deps-visited test1))
+	(empty? deps1) false 
+	(some #{(:name target)} deps1)   true 
+        (some deps1 deps-visited) 
+        (throw (IllegalStateException. (format "%s has a cyclic dependency." (:name test1))))
+	:else (some #(in-dependency-chain? all-tests % target (conj deps-visited test1))
 		    deps1)))))
 
 (defn compare-using "Will run through the comparators, in order, until one finds a difference.
