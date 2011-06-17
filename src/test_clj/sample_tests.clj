@@ -5,20 +5,21 @@
 
                                         ;------------------------------
 
+(def login (test/fn [user pw]
+               (log/info (format "Logging in as %s and pw %s." user pw))))
 
 (defn login-tests []
   {:name "Login sunny day"
    :tags #{:regression}
    :setup (test/fn [] (log/debug "start browser"))
    :procedure (test/fn []
-                       (log/info "log in admin")
+                       (login "admin" "admin")
                        (log/info "verify ui is up"))
-   :further-testing [{:name "Login bad user"
-                      :procedure (test/fn []
-                                          (log/info "log in asdf")
-                                          (log/info "verify"))}
-    
-                     ]})
+   :further-testing (test/data-driven {:name "Login bad user"}
+                                      login [["%%%" ""]
+                                             ["" ""]
+                                             ["admin  " ""]
+                                             [" " " "]])})
 
 (defn provider-tests []
   {:name "provider create sunny day"
@@ -26,7 +27,8 @@
        :setup (test/fn [] (log/debug "ensure admin"))
        :procedure (test/fn []
                            (log/info "create prov")
-                           (log/info "verify create provider"))
+                           (log/info "verify create provider")
+                           (throw (Exception. "create provider failed")))
        :further-testing [{:name "delete provider"
                           :procedure (test/fn []
                                               (log/info "delete")
@@ -45,6 +47,7 @@
                          ]})
 
 (defn all-tests [] {:name "suite"
+                    :procedure (test/fn [] nil)
                     :further-testing [(login-tests) (provider-tests)]})
 
 
