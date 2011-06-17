@@ -1,4 +1,5 @@
 (ns test-clj.core
+  (:require [clojure.zip :as zip])
   (:refer-clojure :exclude [fn]))
 
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
@@ -13,7 +14,10 @@
 
 (def listeners (atom []))
 
-
+(defn test-zip [tree] (zip/zipper (constantly true)
+                          #(:further-testing %)
+                          #(conj %1 {:further-testing %2})
+                          tree))
 
 					;--- listener calls
 ;; (defn notify [result test listener]
@@ -21,7 +25,15 @@
 ;; 	config (meta/configuration test)
 ;; 	config-events {:pass :onConfigurationFinish :skip onConfigurationSkip
 ;; 		       event ]))
-  
+
+(defn data-driven "Generate a set of n data-driven tests from a template
+                   test, a function f that takes p arguments, and a n by p list
+                   of lists containing the data for the tests."
+  [test f data]
+  (for [item data] (assoc test
+                     :procedure (apply partial f item)
+                     :parameters item)))
+
 (comment (defmulti test-end-notify  (fn [result test listener] [(class result) (meta/configuration test) nil]))
  (defmethod test-end-notify [clojure.lang.Keyword nil nil] [result test listener]
    (let [test-event-map {:pass :onTestFinish :skip :onTestSkip}
@@ -41,8 +53,9 @@
 (defn dependencies "Get the test set for all the dependencies of a test"
   [all-tests test]
   (let [test-deps (or (:depends-on test) {})]
-    (mapcat #(filter % all-tests) [ (fn [t] (some #{(:name t)} (:tests test-deps)))
-                                    (fn [t] (some (or (:groups t) #{}) (:groups test-deps)))])))
+    (distinct (mapcat #(filter % all-tests)
+                      [ (fn [t] (some #{(:name t)} (:tests test-deps)))
+                        (fn [t] (some (or (:groups t) #{}) (:groups test-deps)))]))))
 
 ;;fns to manipulate lists of tests
 
@@ -57,6 +70,9 @@
 
 (defn before-group [tests before-group-tests]
   )
+
+
+
 (defn passed? [test]
   (= :pass (:result test)))
 
@@ -95,6 +111,8 @@
                    (execute-test test)
                    (assoc test :result :skip))))))))
 
+(defn dep-tree [tests test]
+  (distinct (tree-seq :depends-on (fn [n] (dependencies tests n)) test)))
 
 (defn in-dependency-chain?
   "Returns true if target is in the dependency chain of test1"
@@ -110,4 +128,15 @@
 	:else (some #(in-dependency-chain? all-tests % target (conj deps-visited test1))
 		    deps1)))))
 
+(defn deps-comparator [tests]
+  (fn [test1 test2]
+    (if (in-dependency-chain? tests test2 test1) ;run test1 before test2
+     1
+     (if (in-dependency-chain? tests test1 test2) ;run test2 before test1
+       -1
+       (let [d1 (count (dependencies tests test1))
+             d2 (count (dependencies tests test2))]
+         (- d2 d1))))))
 
+(defn sort-tests [tests]
+  (sort (deps-comparator tests) tests))
