@@ -5,13 +5,15 @@
 
                                         ;------------------------------
 
+;; :depends should be a fn of one argument (the zipper tree) that returns all the failed
+;; deps, or nil if they all passed.  
+
 (def login (test/fn [user pw]
                (log/info (format "Logging in as %s and pw %s." user pw))))
 
 (defn login-tests []
   {:name "Login sunny day"
    :tags #{:regression}
-   :setup (test/fn [] (log/debug "start browser"))
    :procedure (test/fn []
                        (login "admin" "admin")
                        (log/info "verify ui is up"))
@@ -45,9 +47,28 @@
                          
                      ]})
 
-(defn all-tests [] {:name "suite"
+(defn environment-tests []
+  {:name "environment create sunny"
+   :procedure (test/fn []
+                       (log/info "creating env"))
+   :further-testing [{:name "delete env"
+                      :procedure (test/fn []
+                                          (log/info "deleting"))}]})
+
+
+(defn promotion-tests []
+  {:name "simple promote product"
+   :pre-fn (test/unsatisfied-deps (test/on-test-names ["environment create sunny"]))
+   :procedure (test/fn []
+                       (log/info "promote prod"))
+   :further-testing [{:name "change set cleared"
+                      :procedure (test/fn []
+                                          (log/info "promoting")
+                                          (log/info "change set empty"))}]})
+
+(defn all-tests [] {:name "startup"
                     :procedure (test/fn [] nil)
-                    :further-testing [(login-tests) (provider-tests)]})
+                    :further-testing [(login-tests) (provider-tests) (environment-tests) (promotion-tests)]})
 
 
 

@@ -1,5 +1,6 @@
 (ns test-clj.core
   (:require [clojure.zip :as zip])
+  (:use [clojure.contrib.core :only [-?>]])
   (:refer-clojure :exclude [fn]))
 
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
@@ -42,14 +43,18 @@
              (constantly [])) (zip/root loc))))
 
 (defn run-test [unrun-test-tree]
-  (comment (let [this-test (zip/node unrun-test-tree)
-         dependencies (zip/up unrun-test-tree)
-         deps-passed? (if dependency
-                        (passed? (zip/node dependency))
-                        true)]
-     (zip/replace unrun-test-tree
-                  (if deps-passed? (execute-procedure this-test)
-                      (assoc this-test :result :skip))))))
+  (let [this-test (zip/node unrun-test-tree)
+        direct-dep (zip/up unrun-test-tree)
+        dd-passed? (if direct-dep
+                     (passed? (zip/node direct-dep))
+                     true)
+        failed-pre ((or (:pre-fn this-test) (constantly nil)) (zip/root unrun-test-tree))
+        deps-passed? (and dd-passed? (not failed-pre))]
+    (zip/replace unrun-test-tree
+                 (if deps-passed? (execute-procedure this-test)
+                     (assoc this-test
+                       :result :skip
+                       :failed-pre failed-pre)))))
 
 (defn run-all [unrun-test-tree]
   (first (drop-while (fn [n] (not (:result (zip/node n))))
@@ -75,3 +80,6 @@
   [tests]
   (fn [tree]
     (filter (by-field :name tests) (nodes tree))))
+
+(defn unsatisfied-deps [filter-fn]
+  (fn [tree] (filter (complement passed?) (filter-fn tree))))
