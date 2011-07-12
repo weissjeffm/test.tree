@@ -1,7 +1,7 @@
 (ns test-clj.core
-  (:require [clojure.zip :as zip])
-  (:use [clojure.contrib.core :only [-?>]]
-        )
+  (:require [clojure.zip :as zip]
+            [clojure.pprint :as pprint])
+  (:use [clojure.contrib.core :only [-?>]])
   (:refer-clojure :exclude [fn]))
 
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
@@ -24,13 +24,17 @@
 (defn passed? [test]
   (= :pass (:result test)))
 
+(defn execute [name proc]
+  (proc))
+
 (defn execute-procedure "Executes test, calls listeners, returns either :pass
                     if the test exits normally,
                     :skip if a dependency failed, or an exception the test threw." 
   [test]    
   (let [start-time  (System/currentTimeMillis)]
     (assoc test
-      :result (try ((:procedure test))             ;test fn is called here 
+      :result (try (execute (:name test)
+                            (:procedure test))             ;test fn is called here
                    :pass
                    (catch Exception e e)) 
       :start-time start-time
@@ -60,6 +64,9 @@
 (defn run-all [unrun-test-tree]
   (first (drop-while (fn [n] (not (:result (zip/node n))))
                (iterate (comp zip/next run-test) unrun-test-tree))))
+
+(defn run-suite [tests]
+  (pprint/pprint (run-all (test-zip tests))))
 
 (defn data-driven "Generate a set of n data-driven tests from a template
                    test, a function f that takes p arguments, and a n by p list
