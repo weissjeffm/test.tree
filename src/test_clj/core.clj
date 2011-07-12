@@ -1,14 +1,15 @@
 (ns test-clj.core
   (:require [clojure.zip :as zip])
-  (:use [clojure.contrib.core :only [-?>]])
+  (:use [clojure.contrib.core :only [-?>]]
+        )
   (:refer-clojure :exclude [fn]))
 
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
-                      "\n\n  Oh, but it also allows serialization!!!111eleven")}
-  fn [& sigs]
-  `(with-meta (clojure.core/fn ~@sigs)
-     {:type ::serializable-fn
-      ::source (quote ~&form)}))
+                              "\n\n  Oh, but it also allows serialization!!!111eleven")}
+          fn [& sigs]
+          `(with-meta (clojure.core/fn ~@sigs)
+             {:type ::serializable-fn
+              ::source (quote ~&form)}))
 
 (defmethod print-method ::serializable-fn [o ^Writer w]
   (print-method (::source (meta o)) w))
@@ -60,14 +61,6 @@
   (first (drop-while (fn [n] (not (:result (zip/node n))))
                (iterate (comp zip/next run-test) unrun-test-tree))))
 
-(defn nodes [z]
-  (map zip/node (take-while #(not (zip/end? %)) (iterate zip/next z))))
-
-(defn by-field [k vals]
-  (fn [n]
-    (some (set vals) [(n k)])))
-;;helper functions
-
 (defn data-driven "Generate a set of n data-driven tests from a template
                    test, a function f that takes p arguments, and a n by p list
                    of lists containing the data for the tests."
@@ -76,10 +69,24 @@
                      :procedure (with-meta (apply partial f item) (meta f))
                      :parameters item)))
 
-(defn on-test-names "Used as value of :depends field"
-  [tests]
-  (fn [tree]
-    (filter (by-field :name tests) (nodes tree))))
+(defn plain-node [n]
+  (dissoc n :further-testing))
 
-(defn unsatisfied-deps [filter-fn]
-  (fn [tree] (filter (complement passed?) (filter-fn tree))))
+(defn nodes [z]
+  (map (comp plain-node zip/node) (take-while #(not (zip/end? %)) (iterate zip/next z))))
+;;helper functions
+
+(defn by-field [k vals]
+  (fn [n]
+    (if n (some (set vals) [(n k)]))))
+
+(defn by-name
+  [tests]
+   (by-field :name tests))
+
+(defn unsatisfied [pred]
+  (fn [rootnode] (let [unsat (filter #(and ((complement passed?) %1)
+                                          (pred %1))
+                                    (nodes (test-zip rootnode)))]
+                  (if (= 0 (count unsat)) nil
+                      unsat))))

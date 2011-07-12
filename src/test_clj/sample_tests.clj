@@ -50,7 +50,8 @@
 (defn environment-tests []
   {:name "environment create sunny"
    :procedure (test/fn []
-                       (log/info "creating env"))
+                       (log/info "creating env")
+                       (throw (Exception. "could not create env")))
    :further-testing [{:name "delete env"
                       :procedure (test/fn []
                                           (log/info "deleting"))}]})
@@ -58,7 +59,7 @@
 
 (defn promotion-tests []
   {:name "simple promote product"
-   :pre-fn (test/unsatisfied-deps (test/on-test-names ["environment create sunny"]))
+   :pre-fn (test/unsatisfied (test/by-name ["environment create sunny"]))
    :procedure (test/fn []
                        (log/info "promote prod"))
    :further-testing [{:name "change set cleared"
