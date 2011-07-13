@@ -15,11 +15,13 @@
   (print-method (::source (meta o)) w))
 
 (defn test-zip [tree] (zip/zipper (constantly true)
-                          #(:further-testing %)
-                          #(conj %1 {:further-testing %2})
+                          #(:more %)
+                          #(conj %1 {:more %2})
                           tree))
 
-
+(defn walk-all "Does a depth-first walk of the tree, for each node, passes the loc thru f, and returns the tree" [tree f]
+  (loop [t tree prev nil]
+    ))
 
 (defn passed? [test]
   (= :pass (:result test)))
@@ -34,7 +36,7 @@
   (let [start-time  (System/currentTimeMillis)]
     (assoc test
       :result (try (execute (:name test)
-                            (:procedure test))             ;test fn is called here
+                            (:steps test))             ;test fn is called here
                    :pass
                    (catch Exception e e)) 
       :start-time start-time
@@ -73,11 +75,11 @@
                    of lists containing the data for the tests."
   [test f data]
   (for [item data] (assoc test
-                     :procedure (with-meta (apply partial f item) (meta f))
+                     :steps (with-meta (apply partial f item) (meta f))
                      :parameters item)))
 
 (defn plain-node [n]
-  (dissoc n :further-testing))
+  (dissoc n :more))
 
 (defn nodes [z]
   (map (comp plain-node zip/node) (take-while #(not (zip/end? %)) (iterate zip/next z))))
@@ -97,3 +99,5 @@
                                     (nodes (test-zip rootnode)))]
                   (if (= 0 (count unsat)) nil
                       unsat))))
+
+(defn to-all-nodes [])
