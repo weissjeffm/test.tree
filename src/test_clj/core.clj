@@ -1,6 +1,7 @@
 (ns test-clj.core
   (:require [clojure.zip :as zip]
-            [clojure.pprint :as pprint])
+            [clojure.pprint :as pprint]
+            [clojure.contrib.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]])
   (:refer-clojure :exclude [fn]))
 
@@ -15,13 +16,16 @@
   (print-method (::source (meta o)) w))
 
 (defn test-zip [tree] (zip/zipper (constantly true)
-                          #(:more %)
-                          #(conj %1 {:more %2})
-                          tree))
+                                  #(:more %)
+                                  (fn [node children]
+                                    (with-meta (conj node {:more children}) (meta node)))
+                                    tree))
 
 (defn walk-all "Does a depth-first walk of the tree, for each node, passes the loc thru f, and returns the tree" [tree f]
-  (loop [t tree prev nil]
-    ))
+  (first (drop-while (complement zip/end?)
+                     (iterate (fn [l]
+                                (let [new-l (zip/edit l f)] 
+                                  (zip/next new-l))) tree))))
 
 (defn passed? [test]
   (= :pass (:result test)))
@@ -67,9 +71,6 @@
   (first (drop-while (fn [n] (not (:result (zip/node n))))
                (iterate (comp zip/next run-test) unrun-test-tree))))
 
-(defn run-suite [tests]
-  (pprint/pprint (run-all (test-zip tests))))
-
 (defn data-driven "Generate a set of n data-driven tests from a template
                    test, a function f that takes p arguments, and a n by p list
                    of lists containing the data for the tests."
@@ -100,4 +101,53 @@
                   (if (= 0 (count unsat)) nil
                       unsat))))
 
-(defn to-all-nodes [])
+(defn skipped-tests [z]
+  (filter #(= (:result %) :skip) (nodes z)))
+
+(defn passed-tests [z]
+  (filter #(= (:result %) :pass) (nodes z)))
+
+(defn failed-tests [z]
+  (filter #(isa? (class (:result %)) Exception) (nodes z)))
+
+(defn execution-time [n]
+  (let [start (:start-time n)
+        end (:end-time n)]
+    (if (and start end)
+      (/ (- end start) 1000.0)
+      0)))
+
+(defn total-time [z]
+  (reduce + (map execution-time (nodes z))))
+
+(defn junit-report [z]
+  (let [fails (failed-tests z)
+        skips (skipped-tests z)
+        passes (passed-tests z)
+        all (nodes z)
+        info (fn [n] {:name (:name n)
+                     :time (execution-time n)
+                     :classname (:name n)})]
+    (with-out-str
+      (xml/prxml [:decl! {:version "1.0"} ]
+                 [:testsuite {:tests (str (count all))
+                              :failures (str (count fails))
+                              :errors "0"
+                              :skipped (str (count skips))
+                              :time (str (total-time z))}
+                  (concat (for [fail fails]
+                            [:testcase (info fail)
+                             [:failure {:type (-> (:result fail) class .getCanonicalName )
+                                        :time (execution-time fail)}]])
+                          (for [skip skips]
+                            [:testcase (info skip)
+                             [:skipped]])
+                          (for [pass passes]
+                            [:testcase (info pass)]))]))))
+
+(defn run-suite [tests]
+  (let [result (run-all (test-zip tests))
+        fresh-result (-> result zip/root test-zip)]
+    (pprint/pprint result)
+    (spit "junitreport.xml" (junit-report fresh-result))
+    (zip/root fresh-result)))
