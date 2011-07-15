@@ -30,6 +30,9 @@
 (defn passed? [test]
   (= :pass (:result test)))
 
+(defn configuration? [test]
+  (boolean (:configuration test)))
+
 (defn execute [name proc]
   (proc))
 
@@ -46,12 +49,7 @@
       :start-time start-time
       :end-time (System/currentTimeMillis))))
 
-(defn all-deps "return all the dependencies (as a list of nodes)
-                of the test at this location in the zipper"
-  [loc]
-  (conj (zip/node (zip/up loc))
-        ((or (:depends (zip/node loc))
-             (constantly [])) (zip/root loc))))
+
 
 (defn run-test [unrun-test-tree]
   (let [this-test (zip/node unrun-test-tree)
@@ -101,14 +99,21 @@
                   (if (= 0 (count unsat)) nil
                       unsat))))
 
+(defn filter-tests [z p]
+  (filter p (nodes z)))
+
 (defn skipped-tests [z]
-  (filter #(= (:result %) :skip) (nodes z)))
+  (filter-tests z (fn [n]
+                  (and (not (configuration? n))
+                       (= (:result n) :skip)))))
 
 (defn passed-tests [z]
-  (filter #(= (:result %) :pass) (nodes z)))
+  (filter-tests z (fn [n] (and (not (configuration? n))
+                            (= (:result n) :pass)))))
 
 (defn failed-tests [z]
-  (filter #(isa? (class (:result %)) Exception) (nodes z)))
+  (filter-tests z (fn [n] (and (not (configuration? n))
+                             (isa? (class (:result n)) Exception)))))
 
 (defn execution-time [n]
   (let [start (:start-time n)
@@ -125,7 +130,7 @@
         skips (skipped-tests z)
         passes (passed-tests z)
         all (nodes z)
-        info (fn [n] {:name (:name n)
+        info (fn [n] {:name (or (:parameters n) (:name n))
                      :time (execution-time n)
                      :classname (:name n)})]
     (with-out-str
