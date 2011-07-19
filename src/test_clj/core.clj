@@ -16,7 +16,7 @@
   (print-method (::source (meta o)) w))
 
 (defn test-zip [tree] (zip/zipper (constantly true)
-                                  #(:more %)
+                                  :more 
                                   (fn [node children]
                                     (with-meta (conj node {:more children}) (meta node)))
                                     tree))
@@ -45,7 +45,7 @@
       :result (try (execute (:name test)
                             (:steps test))             ;test fn is called here
                    :pass
-                   (catch Exception e e)) 
+                   (catch Throwable t t)) 
       :start-time start-time
       :end-time (System/currentTimeMillis))))
 
@@ -57,7 +57,7 @@
         dd-passed? (if direct-dep
                      (passed? (zip/node direct-dep))
                      true)
-        failed-pre ((or (:pre-fn this-test) (constantly nil)) (zip/root unrun-test-tree))
+        failed-pre ((or (:pre this-test) (constantly nil)) (zip/root unrun-test-tree))
         deps-passed? (and dd-passed? (not failed-pre))]
     (zip/replace unrun-test-tree
                  (if deps-passed? (execute-procedure this-test)
@@ -73,9 +73,10 @@
                    test, a function f that takes p arguments, and a n by p list
                    of lists containing the data for the tests."
   [test f data]
-  (for [item data] (assoc test
-                     :steps (with-meta (apply partial f item) (meta f))
-                     :parameters item)))
+  (for [item data] (merge (or (meta data) {})
+                          (assoc test
+                            :steps (with-meta (apply partial f item) (meta f))
+                            :parameters item))))
 
 (defn plain-node [n]
   (dissoc n :more))
