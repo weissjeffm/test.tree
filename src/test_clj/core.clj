@@ -21,11 +21,17 @@
                                     (with-meta (conj node {:more children}) (meta node)))
                                     tree))
 
-(defn walk-all "Does a depth-first walk of the tree, for each node, passes the loc thru f, and returns the tree" [tree f]
+(defn walk-all "Does a depth-first walk of the tree, passes each node thru f, and returns the tree"
+  [f tree]
   (first (drop-while (complement zip/end?)
                      (iterate (fn [l]
                                 (let [new-l (zip/edit l f)] 
                                   (zip/next new-l))) tree))))
+
+(defn walk-all-matching [node-pred f tree]
+  (walk-all (fn [n] ((if (node-pred n) f
+                        identity) n))
+            tree))
 
 (defn passed? [test]
   (= :pass (:result test)))
@@ -48,8 +54,6 @@
                    (catch Throwable t t)) 
       :start-time start-time
       :end-time (System/currentTimeMillis))))
-
-
 
 (defn run-test [unrun-test-tree]
   (let [this-test (zip/node unrun-test-tree)
@@ -157,3 +161,23 @@
     (pprint/pprint result)
     (spit "junitreport.xml" (junit-report fresh-result))
     (zip/root fresh-result)))
+
+(defn matching-all-tags [ & tags]
+  (fn [n] (some (set tags) (:tags n))))
+
+(defn before-test "Run f before the steps of test node n" [f n]
+  (let [s (:steps n)]
+    (assoc n :steps (juxt f s))))
+
+(defn after-test "Run f after the steps of test node n" [f n]
+  (let [s (:steps n)]
+    (assoc n :steps (juxt s f))))
+
+(defn run-before "Run f before every test that matches pred"
+  [pred f n]
+  (->> (test-zip n)
+       (walk-all-matching pred (partial before-test f))
+       zip/node))
+
+(defn before-all [f n]
+  (run-before (complement :configuration) f n))
