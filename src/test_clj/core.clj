@@ -1,7 +1,7 @@
 (ns test-clj.core
   (:require [clojure.zip :as zip]
             [clojure.pprint :as pprint]
-            [clojure.stacktrace :as stacktrace]
+            [clojure.stacktrace :as st]
             [clojure.contrib.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]])
   (:refer-clojure :exclude [fn]))
