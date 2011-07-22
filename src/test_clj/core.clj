@@ -68,10 +68,12 @@
         failed-pre ((or (:pre this-test) (constantly nil)) (zip/root unrun-test-tree))
         deps-passed? (and dd-passed? (not failed-pre))]
     (zip/replace unrun-test-tree
-                 (if deps-passed? (execute-procedure this-test)
-                     (assoc this-test
-                       :result :skip
-                       :failed-pre failed-pre)))))
+                 (if (or (:always-run this-test)
+                         deps-passed?)
+                   (execute-procedure this-test)
+                   (assoc this-test
+                     :result :skip
+                     :failed-pre failed-pre)))))
 
 (defn run-all [unrun-test-tree]
   (first (drop-while (fn [n] (not (:result (zip/node n))))
@@ -169,7 +171,6 @@
 (defn combine "combines two thunks into one, using juxt"
   [f g]
   (let [[sf sg] (for [i [f g]] (-> (meta i) ::source))]
-    (prn sf sg)
     (with-meta (juxt f g) (merge (meta f) (meta g)
                                  (if (and sf sg)
                                    {::source (concat sf (drop 2 sg))}
