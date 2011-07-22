@@ -1,6 +1,7 @@
 (ns test-clj.core
   (:require [clojure.zip :as zip]
             [clojure.pprint :as pprint]
+            [clojure.stacktrace :as stacktrace]
             [clojure.contrib.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]])
   (:refer-clojure :exclude [fn]))
@@ -154,10 +155,14 @@
                   (concat (for [fail fails]
                             [:testcase (info fail)
                              [:failure {:type (-> (:result fail) class .getCanonicalName )
-                                        :time (execution-time fail)}]])
+                                        :time (execution-time fail)
+                                        :message (-> (:result fail) .getMessage)}
+                              [:cdata! (-> (:result fail) st/print-cause-trace with-out-str)]]])
                           (for [skip skips]
-                            [:testcase (info skip)
-                             [:skipped]])
+                            (let [reason (:failed-pre skip)] [:testcase (info skip)
+                              [:skipped (if reason
+                                          {:message (str reason)}
+                                          {})]]))
                           (for [pass passes]
                             [:testcase (info pass)]))]))))
 
