@@ -5,12 +5,16 @@
   (:use [clojure.contrib.core :only [-?>]])
   (:refer-clojure :exclude [fn]))
 
+
+
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
                               "\n\n  Oh, but it also allows serialization!!!111eleven")}
           fn [& sigs]
           `(with-meta (clojure.core/fn ~@sigs)
              {:type ::serializable-fn
               ::source (quote ~&form)}))
+
+
 
 (defmethod print-method ::serializable-fn [o ^Writer w]
   (print-method (::source (meta o)) w))
@@ -162,16 +166,25 @@
     (spit "junitreport.xml" (junit-report fresh-result))
     (zip/root fresh-result)))
 
+(defn combine "combines two thunks into one, using juxt"
+  [f g]
+  (let [[sf sg] (for [i [f g]] (-> (meta i) ::source))]
+    (prn sf sg)
+    (with-meta (juxt f g) (merge (meta f) (meta g)
+                                 (if (and sf sg)
+                                   {::source (concat sf (drop 2 sg))}
+                                   {})))))
+
 (defn matching-all-tags [ & tags]
   (fn [n] (some (set tags) (:tags n))))
 
 (defn before-test "Run f before the steps of test node n" [f n]
   (let [s (:steps n)]
-    (assoc n :steps (juxt f s))))
+    (assoc n :steps (combine f s))))
 
 (defn after-test "Run f after the steps of test node n" [f n]
   (let [s (:steps n)]
-    (assoc n :steps (juxt s f))))
+    (assoc n :steps (combine s f))))
 
 (defn run-before "Run f before every test that matches pred"
   [pred f n]
@@ -181,3 +194,5 @@
 
 (defn before-all [f n]
   (run-before (complement :configuration) f n))
+ 
+
