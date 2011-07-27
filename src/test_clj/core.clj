@@ -158,7 +158,7 @@
                  [:testsuite {:tests (str total)
                               :failures (str numfail)
                               :errors "0"
-                              :skipped (str (numskip))
+                              :skipped (str numskip)
                               :time (str (total-time z))}
                   (concat (for [fail fails]
                             [:testcase (info fail)
