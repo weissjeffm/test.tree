@@ -80,6 +80,11 @@
   (first (drop-while (fn [n] (not (:result (zip/node n))))
                (iterate (comp zip/next run-test) unrun-test-tree))))
 
+(comment (defn run-allp [unrun-test-tree]
+           (loop [t unrun-test-tree]
+             (do (run-test t)
+                 ))))
+
 (defn data-driven "Generate a set of n data-driven tests from a template
                    test, a function f that takes p arguments, and a n by p list
                    of lists containing the data for the tests."
@@ -141,16 +146,19 @@
   (let [fails (failed-tests z)
         skips (skipped-tests z)
         passes (passed-tests z)
-        all (nodes z)
+        numfail (count fails)
+        numskip (count skips)
+        numpass (count passes)
+        total (+ numfail numskip numpass)
         info (fn [n] {:name (or (:parameters n) (:name n))
                      :time (execution-time n)
                      :classname (:name n)})]
     (with-out-str
       (xml/prxml [:decl! {:version "1.0"} ]
-                 [:testsuite {:tests (str (count all))
-                              :failures (str (count fails))
+                 [:testsuite {:tests (str total)
+                              :failures (str numfail)
                               :errors "0"
-                              :skipped (str (count skips))
+                              :skipped (str (numskip))
                               :time (str (total-time z))}
                   (concat (for [fail fails]
                             [:testcase (info fail)
