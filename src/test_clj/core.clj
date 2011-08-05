@@ -5,9 +5,9 @@
             [clojure.contrib.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]])
   (:refer-clojure :exclude [fn])
-  (import (java.util.concurrent Executors ExecutorService Callable)))
+  (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory)))
 
-(def *pool* (Executors/newFixedThreadPool 3))
+(def *pool* (atom nil))
 
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
                               "\n\n  Oh, but it also allows serialization!!!111eleven")}
@@ -100,11 +100,22 @@
   (future
     (let [failed-pre ((or (:pre (zip/node tree)) (constantly nil)) (zip/root tree))]  
       (println (str "queueing: " (:name (zip/node tree))))
-      (.submit ^ExecutorService *pool*
+      (.submit ^ExecutorService @*pool*
               ^Callable (identity (fn [] (run-test tree failed-pre)))))))
 
 (defn run-allp [data]
-  (-> (add-promises data) test-zip queue deref .get zip/root))
+  (let [thread-init (-> data meta :thread-init)
+        numthreads (or (-> data meta :threads) 1)] 
+    (reset! *pool*
+            (if thread-init
+             (Executors/newFixedThreadPool 3 (reify ThreadFactory
+                                               (newThread [this r]
+                                                          (Thread. (reify Runnable
+                                                                     (run [this]
+                                                                          (thread-init)
+                                                                          (.run r)))))))
+             (Executors/newFixedThreadPool 3)))
+    (-> (add-promises data) test-zip queue deref .get zip/root)))
 
 (defn data-driven "Generate a set of n data-driven tests from a template
                    test, a function f that takes p arguments, and a n by p list
@@ -232,36 +243,38 @@
   (run-before (complement :configuration) f n))
  
 
-(def sample {:name "blah"
-             :steps (fn [] (Thread/sleep 2000) (println "root"))
-             :more [{:name "borg"
-                     :steps (fn [] (Thread/sleep 3000) (println "there") (throw (Exception. "woops"))) }
-                    {:name "borg3"
-                     :steps (fn [] (Thread/sleep 5000) (println "there3"))
-                     :more [{:name "do the other"
-                             :steps (fn [] (Thread/sleep 4000) (println "there3.1"))}]}
-                    {:name "borg2"
-                     :steps (fn [] (Thread/sleep 4000) (println "there2"))
-                     :more [{:name "do that"
-                             :steps (fn [] (Thread/sleep 4000) (println "there2.1"))}
-                            {:name "do that2"
-                             :steps (fn [] (Thread/sleep 4000) (println "there2.2") (throw (Exception. "woops")))}
-                            {:name "do that3"
-                             :steps (fn [] (Thread/sleep 4000) (println "there2.3"))}
+(def sample (with-meta {:name "blah"
+               :steps (fn [] (Thread/sleep 2000) (println "root"))
+               :more [{:name "borg"
+                       :steps (fn [] (Thread/sleep 3000) (println "there") (throw (Exception. "woops"))) }
+                      {:name "borg3"
+                       :steps (fn [] (Thread/sleep 5000) (println "there3"))
+                       :more [{:name "do the other"
+                               :steps (fn [] (Thread/sleep 4000) (println "there3.1"))}]}
+                      {:name "borg2"
+                       :steps (fn [] (Thread/sleep 4000) (println "there2"))
+                       :more [{:name "do that"
+                               :steps (fn [] (Thread/sleep 4000) (println "there2.1"))}
+                              {:name "do that2"
+                               :steps (fn [] (Thread/sleep 4000) (println "there2.2") (throw (Exception. "woops")))}
+                              {:name "do that3"
+                               :steps (fn [] (Thread/sleep 4000) (println "there2.3"))}
 
-                            {:name "do that4"
-                             :steps (fn [] (Thread/sleep 4000) (println "there2.4"))}
-                            {:name "do that5"
-                             :pre (unsatisfied (by-name ["do the other"]))
-                             :steps (fn [] (Thread/sleep 4000) (println "there2.5"))}
-                            {:name "do that6"
-                             :pre (unsatisfied (by-name ["final"]))
-                             :steps (fn [] (Thread/sleep 4000) (println "there2.6"))}
-                            {:name "do that7"
-                             :pre (unsatisfied (by-name ["do that2"]))
-                             :steps (fn [] (Thread/sleep 4000) (println "there2.7"))}]}
-                    {:name "borg4"
-                     :steps (fn [] (Thread/sleep 5000) (println "there4"))
-                     :more [{:name "final"
-                             :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]} )
+                              {:name "do that4"
+                               :steps (fn [] (Thread/sleep 4000) (println "there2.4"))}
+                              {:name "do that5"
+                               :pre (unsatisfied (by-name ["do the other"]))
+                               :steps (fn [] (Thread/sleep 4000) (println "there2.5"))}
+                              {:name "do that6"
+                               :pre (unsatisfied (by-name ["final"]))
+                               :steps (fn [] (Thread/sleep 4000) (println "there2.6"))}
+                              {:name "do that7"
+                               :pre (unsatisfied (by-name ["do that2"]))
+                               :steps (fn [] (Thread/sleep 4000) (println "there2.7"))}]}
+                      {:name "borg4"
+                       :steps (fn [] (Thread/sleep 5000) (println "there4"))
+                       :more [{:name "final"
+                               :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]}
+              {:threads 4
+               :thread-init (fn [] (println "starting thread!"))}))
 
