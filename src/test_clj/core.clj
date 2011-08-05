@@ -4,9 +4,10 @@
             [clojure.stacktrace :as st]
             [clojure.contrib.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]])
-  (:refer-clojure :exclude [fn]))
+  (:refer-clojure :exclude [fn])
+  (import (java.util.concurrent Executors ExecutorService Callable)))
 
-
+(def *pool* (Executors/newFixedThreadPool 3))
 
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
                               "\n\n  Oh, but it also allows serialization!!!111eleven")}
@@ -38,8 +39,13 @@
                         identity) n))
             tree))
 
+(defn child-locs [tree]
+  (take-while (fn [l] (some #{(zip/node l)} 
+                           (zip/children tree)))
+              (iterate zip/next (zip/down tree))))
+
 (defn passed? [test]
-  (= :pass (:result test)))
+  (-> (:report test) deref :result (= :pass)))
 
 (defn configuration? [test]
   (boolean (:configuration test)))
@@ -52,38 +58,52 @@
                     :skip if a dependency failed, or an exception the test threw." 
   [test]    
   (let [start-time  (System/currentTimeMillis)]
-    (assoc test
-      :result (try (execute (:name test)
-                            (:steps test))             ;test fn is called here
-                   :pass
-                   (catch Throwable t t)) 
-      :start-time start-time
-      :end-time (System/currentTimeMillis))))
+    {:result (try (execute (:name test)
+                           (:steps test))             ;test fn is called here
+                  :pass
+                  (catch Throwable t t)) 
+     :start-time start-time
+     :end-time (System/currentTimeMillis)}))
 
-(defn run-test [unrun-test-tree]
-  (let [this-test (zip/node unrun-test-tree)
-        direct-dep (zip/up unrun-test-tree)
+(declare queue)
+
+(defn add-promises [data]
+  (zip/root (first (drop-while (fn [l]  (not (zip/end? l)))
+                      (iterate (comp zip/next (fn [l] (zip/edit l assoc :report (promise))))
+                               (test-zip data))))))
+
+(defn run-test [tree failed-pre]
+  (println "running test" )
+  (let [this-test (zip/node tree)
+        direct-dep (zip/up tree)
         dd-passed? (if direct-dep
                      (passed? (zip/node direct-dep))
                      true)
-        failed-pre ((or (:pre this-test) (constantly nil)) (zip/root unrun-test-tree))
         deps-passed? (and dd-passed? (not failed-pre))]
-    (zip/replace unrun-test-tree
-                 (if (or (:always-run this-test)
-                         deps-passed?)
-                   (execute-procedure this-test)
-                   (assoc this-test
-                     :result :skip
-                     :failed-pre failed-pre)))))
+    (deliver (:report this-test)
+             (if (or (:always-run this-test)
+                     deps-passed?)
+               (execute-procedure this-test)
+               {:result :skip
+                :failed-pre failed-pre}))
+    (doseq [child-test (child-locs tree)]
+      (queue child-test))
+    tree))
 
 (defn run-all [unrun-test-tree]
   (first (drop-while (fn [n] (not (:result (zip/node n))))
                (iterate (comp zip/next run-test) unrun-test-tree))))
 
-(comment (defn run-allp [unrun-test-tree]
-           (loop [t unrun-test-tree]
-             (do (run-test t)
-                 ))))
+
+(defn queue [tree]
+  (println "queueing")
+  (future
+    (let [failed-pre ((or (:pre (zip/node tree)) (constantly nil)) (zip/root tree))]  
+     (.submit ^ExecutorService *pool*
+              ^Callable (identity (fn [] (run-test tree failed-pre)))))))
+
+(defn run-allp [data]
+  (-> (add-promises data) test-zip queue))
 
 (defn data-driven "Generate a set of n data-driven tests from a template
                    test, a function f that takes p arguments, and a n by p list
@@ -99,6 +119,7 @@
 
 (defn nodes [z]
   (map (comp plain-node zip/node) (take-while #(not (zip/end? %)) (iterate zip/next z))))
+
 ;;helper functions
 
 (defn by-field [k vals]
@@ -146,9 +167,7 @@
   (let [fails (failed-tests z)
         skips (skipped-tests z)
         passes (passed-tests z)
-        numfail (count fails)
-        numskip (count skips)
-        numpass (count passes)
+        [numfail numskip numpass] (map count [fails skips passes])
         total (+ numfail numskip numpass)
         info (fn [n] {:name (or (:parameters n) (:name n))
                      :time (execution-time n)
@@ -210,3 +229,11 @@
   (run-before (complement :configuration) f n))
  
 
+(def sample {:name "blah"
+             :steps (fn [] "hi")
+             :more [{:name "borg"
+                     :steps (fn [] (Thread/sleep 5000) "there")}
+                    {:name "borg2"
+                     :steps (fn [] (Thread/sleep 5000) "there2")}
+                    {:name "borg3"
+                     :steps (fn [] (Thread/sleep 5000) "there3")}]})
