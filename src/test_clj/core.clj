@@ -40,12 +40,18 @@
             tree))
 
 (defn child-locs [tree]
-  (take-while (fn [l] (some #{(zip/node l)} 
+  (take-while (fn [l] (some #{(and l (zip/node l))} 
                            (zip/children tree)))
-              (iterate zip/next (zip/down tree))))
+              (iterate zip/right (zip/down tree))))
+
+(defn result [test]
+  (-> (:report test) deref :result))
+
+(defn failed-pre [test]
+  (-> (:report test) deref :failed-pre))
 
 (defn passed? [test]
-  (-> (:report test) deref :result (= :pass)))
+  (= (result test) :pass))
 
 (defn configuration? [test]
   (boolean (:configuration test)))
@@ -73,7 +79,7 @@
                                (test-zip data))))))
 
 (defn run-test [tree failed-pre]
-  (println "running test" )
+  (println (str "running test: " (:name (zip/node tree))) )
   (let [this-test (zip/node tree)
         direct-dep (zip/up tree)
         dd-passed? (if direct-dep
@@ -90,20 +96,15 @@
       (queue child-test))
     tree))
 
-(defn run-all [unrun-test-tree]
-  (first (drop-while (fn [n] (not (:result (zip/node n))))
-               (iterate (comp zip/next run-test) unrun-test-tree))))
-
-
 (defn queue [tree]
-  (println "queueing")
   (future
     (let [failed-pre ((or (:pre (zip/node tree)) (constantly nil)) (zip/root tree))]  
-     (.submit ^ExecutorService *pool*
+      (println (str "queueing: " (:name (zip/node tree))))
+      (.submit ^ExecutorService *pool*
               ^Callable (identity (fn [] (run-test tree failed-pre)))))))
 
 (defn run-allp [data]
-  (-> (add-promises data) test-zip queue))
+  (-> (add-promises data) test-zip queue deref .get zip/root))
 
 (defn data-driven "Generate a set of n data-driven tests from a template
                    test, a function f that takes p arguments, and a n by p list
@@ -131,8 +132,8 @@
    (by-field :name tests))
 
 (defn unsatisfied [pred]
-  (fn [rootnode] (let [unsat (filter #(and ((complement passed?) %1)
-                                          (pred %1))
+  (fn [rootnode] (let [unsat (filter #(and (pred %1)
+                                          ((complement passed?) %1))
                                     (nodes (test-zip rootnode)))]
                   (if (= 0 (count unsat)) nil
                       unsat))))
@@ -143,19 +144,20 @@
 (defn skipped-tests [z]
   (filter-tests z (fn [n]
                   (and (not (configuration? n))
-                       (= (:result n) :skip)))))
+                       (= (result n) :skip)))))
 
 (defn passed-tests [z]
   (filter-tests z (fn [n] (and (not (configuration? n))
-                            (= (:result n) :pass)))))
+                            (= (result n) :pass)))))
 
 (defn failed-tests [z]
   (filter-tests z (fn [n] (and (not (configuration? n))
-                             (isa? (class (:result n)) Exception)))))
+                             (isa? (class (result n)) Exception)))))
 
 (defn execution-time [n]
-  (let [start (:start-time n)
-        end (:end-time n)]
+  (let [report (-> n :report deref)
+        start (report :start-time)
+        end (report :end-time)]
     (if (and start end)
       (/ (- end start) 1000.0)
       0)))
@@ -181,15 +183,16 @@
                               :time (str (total-time z))}
                   (concat (for [fail fails]
                             [:testcase (info fail)
-                             [:failure {:type (-> (:result fail) class .getCanonicalName )
+                             [:failure {:type (-> (result fail) class .getCanonicalName )
                                         :time (execution-time fail)
-                                        :message (-> (:result fail) .getMessage)}
-                              [:cdata! (-> (:result fail) st/print-cause-trace with-out-str)]]])
+                                        :message (-> (result fail) .getMessage)}
+                              [:cdata! (-> (result fail) st/print-cause-trace with-out-str)]]])
                           (for [skip skips]
-                            (let [reason (:failed-pre skip)] [:testcase (info skip)
-                              [:skipped (if reason
-                                          {:message (str reason)}
-                                          {})]]))
+                            (let [reason (failed-pre skip)]
+                              [:testcase (info skip)
+                               [:skipped (if reason
+                                           {:message (str reason)}
+                                           {})]]))
                           (for [pass passes]
                             [:testcase (info pass)]))]))))
 
@@ -230,10 +233,35 @@
  
 
 (def sample {:name "blah"
-             :steps (fn [] "hi")
+             :steps (fn [] (Thread/sleep 2000) (println "root"))
              :more [{:name "borg"
-                     :steps (fn [] (Thread/sleep 5000) "there")}
-                    {:name "borg2"
-                     :steps (fn [] (Thread/sleep 5000) "there2")}
+                     :steps (fn [] (Thread/sleep 3000) (println "there") (throw (Exception. "woops"))) }
                     {:name "borg3"
-                     :steps (fn [] (Thread/sleep 5000) "there3")}]})
+                     :steps (fn [] (Thread/sleep 5000) (println "there3"))
+                     :more [{:name "do the other"
+                             :steps (fn [] (Thread/sleep 4000) (println "there3.1"))}]}
+                    {:name "borg2"
+                     :steps (fn [] (Thread/sleep 4000) (println "there2"))
+                     :more [{:name "do that"
+                             :steps (fn [] (Thread/sleep 4000) (println "there2.1"))}
+                            {:name "do that2"
+                             :steps (fn [] (Thread/sleep 4000) (println "there2.2") (throw (Exception. "woops")))}
+                            {:name "do that3"
+                             :steps (fn [] (Thread/sleep 4000) (println "there2.3"))}
+
+                            {:name "do that4"
+                             :steps (fn [] (Thread/sleep 4000) (println "there2.4"))}
+                            {:name "do that5"
+                             :pre (unsatisfied (by-name ["do the other"]))
+                             :steps (fn [] (Thread/sleep 4000) (println "there2.5"))}
+                            {:name "do that6"
+                             :pre (unsatisfied (by-name ["final"]))
+                             :steps (fn [] (Thread/sleep 4000) (println "there2.6"))}
+                            {:name "do that7"
+                             :pre (unsatisfied (by-name ["do that2"]))
+                             :steps (fn [] (Thread/sleep 4000) (println "there2.7"))}]}
+                    {:name "borg4"
+                     :steps (fn [] (Thread/sleep 5000) (println "there4"))
+                     :more [{:name "final"
+                             :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]} )
+
