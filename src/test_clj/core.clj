@@ -5,7 +5,8 @@
             [clojure.contrib.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]])
   (:refer-clojure :exclude [fn])
-  (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory)))
+  (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
+                                TimeUnit LinkedBlockingQueue ThreadPoolExecutor)))
 
 (def *pool* (atom nil))
 
@@ -15,8 +16,6 @@
           `(with-meta (clojure.core/fn ~@sigs)
              {:type ::serializable-fn
               ::source (quote ~&form)}))
-
-
 
 (defmethod print-method ::serializable-fn [o ^Writer w]
   (print-method (::source (meta o)) w))
@@ -104,18 +103,40 @@
               ^Callable (identity (fn [] (run-test tree failed-pre)))))))
 
 (defn run-allp [data]
-  (let [thread-init (-> data meta :thread-init)
+  (let [thread-init (or (-> data meta :thread-init) (constantly nil))
+        thread-shutdown (or (-> data meta :thread-shutdown) (constantly nil))
         numthreads (or (-> data meta :threads) 1)] 
     (reset! *pool*
-            (if thread-init
-             (Executors/newFixedThreadPool 3 (reify ThreadFactory
-                                               (newThread [this r]
-                                                          (Thread. (reify Runnable
-                                                                     (run [this]
-                                                                          (thread-init)
-                                                                          (.run r)))))))
-             (Executors/newFixedThreadPool 3)))
+            (if (or thread-init thread-shutdown)
+              (Executors/newFixedThreadPool
+               numthreads
+               (reify ThreadFactory
+                 (newThread [this r]
+                            (Thread. (reify Runnable
+                                       (run [this]
+                                            (try (thread-init)
+                                                 (.run r)
+                                                 (finally (thread-shutdown)))))))))
+              (Executors/newFixedThreadPool numthreads)))
     (-> (add-promises data) test-zip queue deref .get zip/root)))
+
+(comment (proxy [ThreadPoolExecutor]
+                           [numthreads numthreads (long 0)
+                            ^java.util.concurrent.TimeUnit TimeUnit/MILLISECONDS
+                            ^java.util.concurrent.BlockingQueue (LinkedBlockingQueue.)
+                            ^java.util.concurrent.ThreadFactory
+                            (reify ThreadFactory
+                              (newThread [this r]
+                                         (Thread. (reify Runnable
+                                                    (run [this]
+                                                         (try (println "start")
+                                                              (.run r)
+                                                              (finally (println "end"))))))))]
+                         (afterExecute [t r]
+                                       (proxy-super afterExecute t r)
+                                       (if (and (.isShutdown this)
+                                                (-> this .getQueue .size (= 0)))
+                                         (println "shut")))))
 
 (defn data-driven "Generate a set of n data-driven tests from a template
                    test, a function f that takes p arguments, and a n by p list
@@ -276,5 +297,6 @@
                        :more [{:name "final"
                                :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]}
               {:threads 4
-               :thread-init (fn [] (println "starting thread!"))}))
+               :thread-init (fn [] (println "starting thread!"))
+               :thread-shutdown (fn [] (println "shutting down thread!"))}))
 
