@@ -6,9 +6,12 @@
   (:use [clojure.contrib.core :only [-?>]])
   (:refer-clojure :exclude [fn])
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
-                                TimeUnit LinkedBlockingQueue ThreadPoolExecutor)))
+                                TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
 (def *pool* (atom nil))
+(def q  (atom nil))
+(def threads (atom nil))
+(def done (atom nil))
 
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
                               "\n\n  Oh, but it also allows serialization!!!111eleven")}
@@ -95,30 +98,22 @@
       (queue child-test))
     tree))
 
+(defn consume [a-state]
+  (println "thread consuming: " a-state)
+  (with-bindings a-state
+    (while (not @done)
+      (if-let [next-item (.poll @q (long 500) TimeUnit/MILLISECONDS)]
+       (next-item)))))
+
 (defn queue [tree]
   (future
     (let [failed-pre ((or (:pre (zip/node tree)) (constantly nil)) (zip/root tree))]  
       (println (str "queueing: " (:name (zip/node tree))))
-      (.submit ^ExecutorService @*pool*
-              ^Callable (identity (fn [] (run-test tree failed-pre)))))))
+      (comment (.submit ^ExecutorService @*pool*
+                        ^Callable (identity (fn [] (run-test tree failed-pre)))))
+      (.offer @q (fn [] (run-test tree failed-pre))))))
 
-(defn run-allp [data]
-  (let [thread-init (or (-> data meta :thread-init) (constantly nil))
-        thread-shutdown (or (-> data meta :thread-shutdown) (constantly nil))
-        numthreads (or (-> data meta :threads) 1)] 
-    (reset! *pool*
-            (if (or thread-init thread-shutdown)
-              (Executors/newFixedThreadPool
-               numthreads
-               (reify ThreadFactory
-                 (newThread [this r]
-                            (Thread. (reify Runnable
-                                       (run [this]
-                                            (try (thread-init)
-                                                 (.run r)
-                                                 (finally (thread-shutdown)))))))))
-              (Executors/newFixedThreadPool numthreads)))
-    (-> (add-promises data) test-zip queue deref .get zip/root)))
+
 
 (comment (proxy [ThreadPoolExecutor]
                            [numthreads numthreads (long 0)
@@ -228,8 +223,33 @@
                           (for [pass passes]
                             [:testcase (info pass)]))]))))
 
+(defn run-allp [data]
+  (let [binding-map (or (-> data meta :binding-map) {})
+        numthreads (or (-> data meta :threads) 1)] 
+    (comment (reset! *pool*
+                     (if thread-factory
+                       (Executors/newFixedThreadPool numthreads thread-factory)
+                       (Executors/newFixedThreadPool numthreads))))
+    (reset! q (LinkedBlockingQueue.))
+    (reset! threads
+            (repeatedly numthreads
+                        (fn [] (println "Starting thread.")
+                          (.start (Thread.
+                                   (fn []
+                                     (consume (zipmap (keys binding-map)
+                                                      (map #(%) (vals binding-map))))))))))
+    (comment (reset! agents (repeatedly numthreads
+                                        (fn []
+                                          (zipmap (keys binding-map)
+                                                  (map #(%) (vals binding-map)))))))
+    (let [data-w-prom (add-promises data)]
+      (-> data-w-prom test-zip queue)
+      (total-time (test-zip data-w-prom))
+      (reset! done true)
+      data-w-prom)))
+
 (defn run-suite [tests]
-  (let [result (run-all (test-zip tests))
+  (let [result (run-allp (test-zip tests))
         fresh-result (-> result zip/root test-zip)]
     (pprint/pprint result)
     (spit "junitreport.xml" (junit-report fresh-result))
@@ -263,40 +283,40 @@
 (defn before-all [f n]
   (run-before (complement :configuration) f n))
  
+(def myvar "hi")
 
 (def sample (with-meta {:name "blah"
-               :steps (fn [] (Thread/sleep 2000) (println "root"))
-               :more [{:name "borg"
-                       :steps (fn [] (Thread/sleep 3000) (println "there") (throw (Exception. "woops"))) }
-                      {:name "borg3"
-                       :steps (fn [] (Thread/sleep 5000) (println "there3"))
-                       :more [{:name "do the other"
-                               :steps (fn [] (Thread/sleep 4000) (println "there3.1"))}]}
-                      {:name "borg2"
-                       :steps (fn [] (Thread/sleep 4000) (println "there2"))
-                       :more [{:name "do that"
-                               :steps (fn [] (Thread/sleep 4000) (println "there2.1"))}
-                              {:name "do that2"
-                               :steps (fn [] (Thread/sleep 4000) (println "there2.2") (throw (Exception. "woops")))}
-                              {:name "do that3"
-                               :steps (fn [] (Thread/sleep 4000) (println "there2.3"))}
+                        :steps (fn [] (Thread/sleep 2000) (println "root"))
+                        :more [{:name "borg"
+                                :steps (fn [] (Thread/sleep 3000) (println "there") (throw (Exception. "woops"))) }
+                               {:name "borg3"
+                                :steps (fn [] (Thread/sleep 5000) (println (str "there3 " myvar )))
+                                :more [{:name "do the other"
+                                        :steps (fn [] (Thread/sleep 4000) (println "there3.1"))}]}
+                               {:name "borg2"
+                                :steps (fn [] (Thread/sleep 4000) (println "there2"))
+                                :more [{:name "do that"
+                                        :steps (fn [] (Thread/sleep 4000) (println "there2.1"))}
+                                       {:name "do that2"
+                                        :steps (fn [] (Thread/sleep 4000) (println "there2.2") (throw (Exception. "woops")))}
+                                       {:name "do that3"
+                                        :steps (fn [] (Thread/sleep 4000) (println "there2.3"))}
 
-                              {:name "do that4"
-                               :steps (fn [] (Thread/sleep 4000) (println "there2.4"))}
-                              {:name "do that5"
-                               :pre (unsatisfied (by-name ["do the other"]))
-                               :steps (fn [] (Thread/sleep 4000) (println "there2.5"))}
-                              {:name "do that6"
-                               :pre (unsatisfied (by-name ["final"]))
-                               :steps (fn [] (Thread/sleep 4000) (println "there2.6"))}
-                              {:name "do that7"
-                               :pre (unsatisfied (by-name ["do that2"]))
-                               :steps (fn [] (Thread/sleep 4000) (println "there2.7"))}]}
-                      {:name "borg4"
-                       :steps (fn [] (Thread/sleep 5000) (println "there4"))
-                       :more [{:name "final"
-                               :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]}
+                                       {:name "do that4"
+                                        :steps (fn [] (Thread/sleep 4000) (println (str "there2.4 " myvar)))}
+                                       {:name "do that5"
+                                        :pre (unsatisfied (by-name ["do the other"]))
+                                        :steps (fn [] (Thread/sleep 4000) (println "there2.5"))}
+                                       {:name "do that6"
+                                        :pre (unsatisfied (by-name ["final"]))
+                                        :steps (fn [] (Thread/sleep 4000) (println (str "there2.6 " myvar)))}
+                                       {:name "do that7"
+                                        :pre (unsatisfied (by-name ["do that2"]))
+                                        :steps (fn [] (Thread/sleep 4000) (println "there2.7"))}]}
+                               {:name "borg4"
+                                :steps (fn [] (Thread/sleep 5000) (println "there4"))
+                                :more [{:name "final"
+                                        :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]}
               {:threads 4
-               :thread-init (fn [] (println "starting thread!"))
-               :thread-shutdown (fn [] (println "shutting down thread!"))}))
+               :binding-map {#'myvar (fn [] (System/currentTimeMillis))}}))
 
