@@ -8,9 +8,8 @@
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
-(def *pool* (atom nil))
 (def q  (atom nil))
-(def threads (atom nil))
+(def reports (atom {}))
 (def done (atom nil))
 
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
@@ -46,11 +45,14 @@
                            (zip/children tree)))
               (iterate zip/right (zip/down tree))))
 
-(defn result [test]
-  (-> (:report test) deref :result))
+(defn report [test]
+  @(@reports test))
 
 (defn failed-pre [test]
-  (-> (:report test) deref :failed-pre))
+  (-> test report :failed-pre))
+
+(defn result [test]
+  (-> test report :result))
 
 (defn passed? [test]
   (= (result test) :pass))
@@ -75,20 +77,15 @@
 
 (declare queue)
 
-(defn add-promises [data]
-  (zip/root (first (drop-while (fn [l]  (not (zip/end? l)))
-                      (iterate (comp zip/next (fn [l] (zip/edit l assoc :report (promise))))
-                               (test-zip data))))))
-
 (defn run-test [tree failed-pre]
   (println (str "running test: " (:name (zip/node tree))) )
-  (let [this-test (zip/node tree)
+  (let [this-test (-> tree zip/node plain-node)
         direct-dep (zip/up tree)
         dd-passed? (if direct-dep
-                     (passed? (zip/node direct-dep))
+                     (passed? (-> direct-dep zip/node plain-node))
                      true)
         deps-passed? (and dd-passed? (not failed-pre))]
-    (deliver (:report this-test)
+    (deliver (@reports this-test)
              (if (or (:always-run this-test)
                      deps-passed?)
                (execute-procedure this-test)
@@ -101,37 +98,18 @@
 (defn consume [a-state]
   (println "thread consuming: " a-state)
   (with-bindings a-state
-    (while (not @done)
+    (while (not (and @done
+                     (.isEmpty @q)))
       (if-let [next-item (.poll @q (long 500) TimeUnit/MILLISECONDS)]
        (next-item)))))
 
 (defn queue [tree]
   (future
-    (let [failed-pre ((or (:pre (zip/node tree)) (constantly nil)) (zip/root tree))]  
-      (println (str "queueing: " (:name (zip/node tree))))
-      (comment (.submit ^ExecutorService @*pool*
-                        ^Callable (identity (fn [] (run-test tree failed-pre)))))
+    (let [failed-pre ((or (:pre (zip/node tree)) (constantly nil)) (zip/root tree))
+          test (-> tree zip/node plain-node)]  
+      (println (str "queueing: " (:name test)))
+      (swap! reports assoc test (promise))
       (.offer @q (fn [] (run-test tree failed-pre))))))
-
-
-
-(comment (proxy [ThreadPoolExecutor]
-                           [numthreads numthreads (long 0)
-                            ^java.util.concurrent.TimeUnit TimeUnit/MILLISECONDS
-                            ^java.util.concurrent.BlockingQueue (LinkedBlockingQueue.)
-                            ^java.util.concurrent.ThreadFactory
-                            (reify ThreadFactory
-                              (newThread [this r]
-                                         (Thread. (reify Runnable
-                                                    (run [this]
-                                                         (try (println "start")
-                                                              (.run r)
-                                                              (finally (println "end"))))))))]
-                         (afterExecute [t r]
-                                       (proxy-super afterExecute t r)
-                                       (if (and (.isShutdown this)
-                                                (-> this .getQueue .size (= 0)))
-                                         (println "shut")))))
 
 (defn data-driven "Generate a set of n data-driven tests from a template
                    test, a function f that takes p arguments, and a n by p list
@@ -168,34 +146,36 @@
 (defn filter-tests [z p]
   (filter p (nodes z)))
 
-(defn skipped-tests [z]
-  (filter-tests z (fn [n]
+(defn filter-reports [p]
+  (filter p (map merge (keys @reports) (map deref (vals @reports)))))
+
+(defn skipped-tests []
+  (filter-reports (fn [n]
                   (and (not (configuration? n))
                        (= (result n) :skip)))))
 
-(defn passed-tests [z]
-  (filter-tests z (fn [n] (and (not (configuration? n))
+(defn passed-tests []
+  (filter-reports (fn [n] (and (not (configuration? n))
                             (= (result n) :pass)))))
 
-(defn failed-tests [z]
-  (filter-tests z (fn [n] (and (not (configuration? n))
-                             (isa? (class (result n)) Exception)))))
+(defn failed-tests []
+  (filter-reports (fn [n] (and (not (configuration? n))
+                              (isa? (class (result n)) Exception)))))
 
-(defn execution-time [n]
-  (let [report (-> n :report deref)
-        start (report :start-time)
-        end (report :end-time)]
+(defn execution-time [report]
+  (let [start (@report :start-time)
+        end (@report :end-time)]
     (if (and start end)
       (/ (- end start) 1000.0)
       0)))
 
-(defn total-time [z]
-  (reduce + (map execution-time (nodes z))))
+(defn total-time []
+  (reduce + (map execution-time (vals @reports))))
 
-(defn junit-report [z]
-  (let [fails (failed-tests z)
-        skips (skipped-tests z)
-        passes (passed-tests z)
+(defn junit-report []
+  (let [fails (failed-tests)
+        skips (skipped-tests)
+        passes (passed-tests)
         [numfail numskip numpass] (map count [fails skips passes])
         total (+ numfail numskip numpass)
         info (fn [n] {:name (or (:parameters n) (:name n))
@@ -207,7 +187,7 @@
                               :failures (str numfail)
                               :errors "0"
                               :skipped (str numskip)
-                              :time (str (total-time z))}
+                              :time (str (total-time))}
                   (concat (for [fail fails]
                             [:testcase (info fail)
                              [:failure {:type (-> (result fail) class .getCanonicalName )
@@ -225,32 +205,28 @@
 
 (defn run-allp [data]
   (let [binding-map (or (-> data meta :binding-map) {})
+        thread-setup (or (-> data meta :thread-setup) (constantly nil))
+        thread-teardown (or (-> data meta :thread-teardown) (constantly nil))
         numthreads (or (-> data meta :threads) 1)] 
-    (comment (reset! *pool*
-                     (if thread-factory
-                       (Executors/newFixedThreadPool numthreads thread-factory)
-                       (Executors/newFixedThreadPool numthreads))))
+    
     (reset! q (LinkedBlockingQueue.))
-    (reset! threads
-            (repeatedly numthreads
-                        (fn [] (println "Starting thread.")
-                          (.start (Thread.
-                                   (fn []
-                                     (consume (zipmap (keys binding-map)
-                                                      (map #(%) (vals binding-map))))))))))
-    (comment (reset! agents (repeatedly numthreads
-                                        (fn []
-                                          (zipmap (keys binding-map)
-                                                  (map #(%) (vals binding-map)))))))
-    (let [data-w-prom (add-promises data)]
-      (-> data-w-prom test-zip queue)
-      (total-time (test-zip data-w-prom))
-      (reset! done true)
-      data-w-prom)))
+    (reset! done false)
+    
+    (doseq [_ (range numthreads)]
+      (.start (Thread.
+               (fn []
+                 (thread-setup)
+                 (consume (zipmap (keys binding-map)
+                                  (map #(%) (vals binding-map))))
+                 (thread-teardown)))))
+    @(queue (test-zip data))
+    (println (total-time))
+    (reset! done true)
+    data))
 
 (defn run-suite [tests]
   (let [result (run-allp (test-zip tests))
-        fresh-result (-> result zip/root test-zip)]
+        fresh-result (test-zip result)]
     (pprint/pprint result)
     (spit "junitreport.xml" (junit-report fresh-result))
     (zip/root fresh-result)))
@@ -318,5 +294,5 @@
                                 :more [{:name "final"
                                         :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]}
               {:threads 4
-               :binding-map {#'myvar (fn [] (System/currentTimeMillis))}}))
+               :binding-map {#'myvar gensym}}))
 
