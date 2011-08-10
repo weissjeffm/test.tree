@@ -22,6 +22,11 @@
 (defmethod print-method ::serializable-fn [o ^Writer w]
   (print-method (::source (meta o)) w))
 
+;;
+;;pre-execution test manipulation functions
+;;
+(declare passed?)
+
 (defn test-zip [tree] (zip/zipper (constantly true)
                                   :more 
                                   (fn [node children]
@@ -40,76 +45,13 @@
                         identity) n))
             tree))
 
+(defn plain-node [n]
+  (dissoc n :more))
+
 (defn child-locs [tree]
   (take-while (fn [l] (some #{(and l (zip/node l))} 
                            (zip/children tree)))
               (iterate zip/right (zip/down tree))))
-
-(defn report [test]
-  @(@reports test))
-
-(defn failed-pre [test]
-  (-> test report :failed-pre))
-
-(defn result [test]
-  (-> test report :result))
-
-(defn passed? [test]
-  (= (result test) :pass))
-
-(defn configuration? [test]
-  (boolean (:configuration test)))
-
-(defn execute [name proc]
-  (proc))
-
-(defn execute-procedure "Executes test, calls listeners, returns either :pass
-                    if the test exits normally,
-                    :skip if a dependency failed, or an exception the test threw." 
-  [test]    
-  (let [start-time  (System/currentTimeMillis)]
-    {:result (try (execute (:name test)
-                           (:steps test))             ;test fn is called here
-                  :pass
-                  (catch Throwable t t)) 
-     :start-time start-time
-     :end-time (System/currentTimeMillis)}))
-
-(declare queue)
-
-(defn run-test [tree failed-pre]
-  (println (str "running test: " (:name (zip/node tree))) )
-  (let [this-test (-> tree zip/node plain-node)
-        direct-dep (zip/up tree)
-        dd-passed? (if direct-dep
-                     (passed? (-> direct-dep zip/node plain-node))
-                     true)
-        deps-passed? (and dd-passed? (not failed-pre))]
-    (deliver (@reports this-test)
-             (if (or (:always-run this-test)
-                     deps-passed?)
-               (execute-procedure this-test)
-               {:result :skip
-                :failed-pre failed-pre}))
-    (doseq [child-test (child-locs tree)]
-      (queue child-test))
-    tree))
-
-(defn consume [a-state]
-  (println "thread consuming: " a-state)
-  (with-bindings a-state
-    (while (not (and @done
-                     (.isEmpty @q)))
-      (if-let [next-item (.poll @q (long 500) TimeUnit/MILLISECONDS)]
-       (next-item)))))
-
-(defn queue [tree]
-  (future
-    (let [failed-pre ((or (:pre (zip/node tree)) (constantly nil)) (zip/root tree))
-          test (-> tree zip/node plain-node)]  
-      (println (str "queueing: " (:name test)))
-      (swap! reports assoc test (promise))
-      (.offer @q (fn [] (run-test tree failed-pre))))))
 
 (defn data-driven "Generate a set of n data-driven tests from a template
                    test, a function f that takes p arguments, and a n by p list
@@ -120,13 +62,8 @@
                             :steps (with-meta (apply partial f item) (meta f))
                             :parameters item))))
 
-(defn plain-node [n]
-  (dissoc n :more))
-
 (defn nodes [z]
   (map (comp plain-node zip/node) (take-while #(not (zip/end? %)) (iterate zip/next z))))
-
-;;helper functions
 
 (defn by-field [k vals]
   (fn [n]
@@ -142,94 +79,6 @@
                                     (nodes (test-zip rootnode)))]
                   (if (= 0 (count unsat)) nil
                       unsat))))
-
-(defn filter-tests [z p]
-  (filter p (nodes z)))
-
-(defn filter-reports [p]
-  (filter p (map merge (keys @reports) (map deref (vals @reports)))))
-
-(defn skipped-tests []
-  (filter-reports (fn [n]
-                  (and (not (configuration? n))
-                       (= (result n) :skip)))))
-
-(defn passed-tests []
-  (filter-reports (fn [n] (and (not (configuration? n))
-                            (= (result n) :pass)))))
-
-(defn failed-tests []
-  (filter-reports (fn [n] (and (not (configuration? n))
-                              (isa? (class (result n)) Exception)))))
-
-(defn execution-time [report]
-  (let [start (@report :start-time)
-        end (@report :end-time)]
-    (if (and start end)
-      (/ (- end start) 1000.0)
-      0)))
-
-(defn total-time []
-  (reduce + (map execution-time (vals @reports))))
-
-(defn junit-report []
-  (let [fails (failed-tests)
-        skips (skipped-tests)
-        passes (passed-tests)
-        [numfail numskip numpass] (map count [fails skips passes])
-        total (+ numfail numskip numpass)
-        info (fn [n] {:name (or (:parameters n) (:name n))
-                     :time (execution-time n)
-                     :classname (:name n)})]
-    (with-out-str
-      (xml/prxml [:decl! {:version "1.0"} ]
-                 [:testsuite {:tests (str total)
-                              :failures (str numfail)
-                              :errors "0"
-                              :skipped (str numskip)
-                              :time (str (total-time))}
-                  (concat (for [fail fails]
-                            [:testcase (info fail)
-                             [:failure {:type (-> (result fail) class .getCanonicalName )
-                                        :time (execution-time fail)
-                                        :message (-> (result fail) .getMessage)}
-                              [:cdata! (-> (result fail) st/print-cause-trace with-out-str)]]])
-                          (for [skip skips]
-                            (let [reason (failed-pre skip)]
-                              [:testcase (info skip)
-                               [:skipped (if reason
-                                           {:message (str reason)}
-                                           {})]]))
-                          (for [pass passes]
-                            [:testcase (info pass)]))]))))
-
-(defn run-allp [data]
-  (let [binding-map (or (-> data meta :binding-map) {})
-        thread-setup (or (-> data meta :thread-setup) (constantly nil))
-        thread-teardown (or (-> data meta :thread-teardown) (constantly nil))
-        numthreads (or (-> data meta :threads) 1)] 
-    
-    (reset! q (LinkedBlockingQueue.))
-    (reset! done false)
-    
-    (doseq [_ (range numthreads)]
-      (.start (Thread.
-               (fn []
-                 (thread-setup)
-                 (consume (zipmap (keys binding-map)
-                                  (map #(%) (vals binding-map))))
-                 (thread-teardown)))))
-    @(queue (test-zip data))
-    (println (total-time))
-    (reset! done true)
-    data))
-
-(defn run-suite [tests]
-  (let [result (run-allp (test-zip tests))
-        fresh-result (test-zip result)]
-    (pprint/pprint result)
-    (spit "junitreport.xml" (junit-report fresh-result))
-    (zip/root fresh-result)))
 
 (defn combine "combines two thunks into one, using juxt"
   [f g]
@@ -254,10 +103,177 @@
   [pred f n]
   (->> (test-zip n)
        (walk-all-matching pred (partial before-test f))
-       zip/node))
+       zip/root))
 
 (defn before-all [f n]
   (run-before (complement :configuration) f n))
+
+;;
+;;post-execution reporting functions
+;;
+(defn report [test]
+  @(@reports test))
+
+(defn failed-pre [test]
+  (-> test report :failed-pre))
+
+(defn result [test]
+  (-> test report :result))
+
+(defn passed? [test]
+  (= (result test) :pass))
+
+(defn configuration? [test]
+  (boolean (:configuration test)))
+
+(defn skipped-tests []
+  (filter (fn [t] (and (not (configuration? t))
+                       (= (result t) :skip))) (keys @reports)))
+
+(defn passed-tests []
+  (filter (fn [t] (and (not (configuration? t))
+                            (= (result t) :pass))) (keys @reports)))
+
+(defn failed-tests []
+  (filter (fn [n] (and (not (configuration? n))
+                      (isa? (class (result n)) Exception))) (keys @reports)))
+
+(defn execution-time [test]
+  (let [report (-> (@reports test) deref)
+        start (report :start-time)
+        end (report :end-time)]
+    (if (and start end)
+      (/ (- end start) 1000.0)
+      0)))
+
+(defn total-time []
+  (reduce + (map execution-time (keys @reports))))
+
+(defn junit-report []
+  (let [fails (failed-tests)
+        skips (skipped-tests)
+        passes (passed-tests)
+        [numfail numskip numpass] (map count [fails skips passes])
+        total (+ numfail numskip numpass)
+        info (fn [t] {:name (or (:parameters t) (:name t))
+                     :time (execution-time t)
+                     :classname (:name t)})]
+    (with-out-str
+      (xml/prxml [:decl! {:version "1.0"} ]
+                 [:testsuite {:tests (str total)
+                              :failures (str numfail)
+                              :errors "0"
+                              :skipped (str numskip)
+                              :time (str (total-time))}
+                  (concat (for [fail fails]
+                            [:testcase (info fail)
+                             [:failure {:type (->  fail result class .getCanonicalName )
+                                        :time (execution-time fail)
+                                        :message (-> fail result .getMessage)}
+                              [:cdata! (-> fail result st/print-cause-trace with-out-str)]]])
+                          (for [skip skips]
+                            (let [reason (failed-pre skip)]
+                              [:testcase (info skip)
+                               [:skipped (if reason
+                                           {:message (str reason)}
+                                           {})]]))
+                          (for [pass passes]
+                            [:testcase (info pass)]))]))))
+;;test execution functions
+(defn execute [name proc]
+  (proc))
+
+(defn execute-procedure "Executes test, calls listeners, returns either :pass
+                    if the test exits normally,
+                    :skip if a dependency failed, or an exception the test threw." 
+  [test]    
+  (let [start-time  (System/currentTimeMillis)]
+    {:result (try (execute (:name test)
+                           (:steps test))             ;test fn is called here
+                  :pass
+                  (catch Throwable t t)) 
+     :start-time start-time
+     :end-time (System/currentTimeMillis)}))
+
+(declare queue)
+
+(defn run-test [tree failed-pre]
+  (println (str "running test: " (:name (zip/node tree))) )
+  
+  (let [this-test (-> tree zip/node plain-node)
+        direct-dep (zip/up tree)
+        dd-passed? (if direct-dep
+                     (passed? (-> direct-dep zip/node plain-node))
+                     true)
+        deps-passed? (and dd-passed? (not failed-pre))]
+    (deliver (@reports this-test)
+             (if (or (:always-run this-test)
+                     deps-passed?)
+               (execute-procedure this-test)
+               {:result :skip
+                :failed-pre failed-pre})))
+  (println "result delivered: " (:name (zip/node tree)))
+  (doseq [child-test (child-locs tree)]
+    (queue child-test)))
+
+(defn consume []
+  (println "thread consuming") 
+  (while (and @q
+              (not (and @done
+                        (.isEmpty @q))))
+    (if-let [next-item (.poll @q (long 500) TimeUnit/MILLISECONDS)]
+      (next-item)))
+  (if-not @q (println "Queue reset, thread exiting.")
+          (println "thread done.")))
+
+(defn queue [tree]
+  (future
+    (let [failed-pre (try
+                       ((or (:pre (zip/node tree))
+                            (constantly nil))
+                        (zip/root tree))
+                       (catch Exception e e))
+          test (-> tree zip/node plain-node)]  
+      (println (str "queueing: " (:name test)))
+      (.offer @q (fn [] (run-test tree failed-pre))))))
+
+(defn run-allp [data]
+  (let [binding-map (or (-> data meta :binding-map) {})
+        setup (or (-> data meta :setup) (constantly nil))
+        teardown (or (-> data meta :teardown) (constantly nil))
+        thread-setup (or (-> data meta :thread-setup) (constantly nil))
+        thread-teardown (or (-> data meta :thread-teardown) (constantly nil))
+        numthreads (or (-> data meta :threads) 1)
+        tree (test-zip data)] 
+    
+    (reset! q (LinkedBlockingQueue.))
+    (reset! done false)
+    (reset! reports (zipmap (map plain-node (nodes tree))
+                            (repeatedly promise)))
+    
+    (let [end-wait (future ;;;when all reports are done, raise 'done' flag
+                               ;;;and do teardown
+                         (doall (map deref (vals @reports)))
+                         (reset! done true) 
+                         (teardown))]
+      (setup)
+      (doseq [agentnum (range numthreads)]
+        (.start (Thread.
+                 (fn []
+                   (with-bindings (zipmap (keys binding-map)
+                                          (map #(%) (vals binding-map)))
+                     (thread-setup)
+                     (consume)
+                     (thread-teardown)))
+                 (str "Test-clj-agent-" agentnum))))
+      (queue tree)
+      end-wait)))
+
+(defn run-suite [tests]
+  @(run-allp tests)
+  (spit "junitreport.xml" (junit-report)))
+
+
  
 (def myvar "hi")
 
