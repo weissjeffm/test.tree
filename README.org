@@ -1,0 +1,60 @@
+* Test-clj is a functional test harness for Clojure.  
+    It fulfills the same purpose as Java's TestNG or Python's
+    nosetests.  It gathers tests, handles dependencies, allows
+    flexible grouping and ordering of tests and their associated
+    setups.  It is multithreaded and leverages Clojure's power as much
+    as possible.
+** How do I use it?
+   The requirements for a set of test-clj tests is a little bit
+   different than TestNG or nosetests.  Rather than specifying what
+   test to run by annotations, or other markings, tests are laid out
+   in a tree data structure directly.  This may sound rigid, but
+   Clojure makes manipulating this structure incredibly easy.  The
+   input to test-clj is a tree where each node is a test.  The tree
+   should be arranged with the following properties:
+   + Each level of the tree should be more and more detailed testing.
+     Each node will only be run if its parent passes.  Example: if you
+     were testing the gmail app, logging in would probably be at the
+     root, since not much else can be tested if that fails.  A test
+     that sends email with an attachment would be a descendant of a
+     test that sends a simple email with no attachment.  Deleting an
+     email from search results would be a descendant of a simple
+     search.
+   + Each node is a map - it contains the test's name, a no-arg
+     function that when called, runs the actual test, a list of child
+     tests, and some optional properties.
+   + Each test needs to be *independent* in a certain sense.  The only
+     guarantee test-clj makes about a test is that its parent will
+     have passed before it is executed.  If the parent fails, the
+     child and all its descendants are marked "skipped" and not run.
+     There is no guarantee that a child will run *immediately* after
+     its parent, or that it will run on the same thread.  That means
+     you should take precautions to avoid collisions in your app.  To
+     go back to the gmail example, if there are 3 sibling tests:
+  
+     1. Forward an email
+     2. Reply to an email
+     3. Delete an email
+       
+     They should not all try to operate on the same email!  Delete may
+     run first.  If a collision is possible, each test should either
+     create or check for its own resources as part of its procedure.
+     If you delib
+** Why do it that way?
+   By arranging the tree by dependency, you get a lot for free.
+   + Ability to control depth of testing.  If you have a suite of 1000
+     automated tests that take 8 hours to run, but you need to test a
+     patch very quickly and only have 1 hour, you just set maxtime to
+     1 hour, and test-clj descends as deeply into the tree as it can
+     in 1 hour.  That guarantees the most meaningful regression
+     testing in the amount of time available.
+   + A list of your application's dependencies is maintained just as a
+     side effect of having automated tests.  If someone wants to know
+     what features need to be working in order to test feature X, just
+     look at your tree for the path from the root, to the test for
+     feature X.  Test-clj will actually just give you this information
+     directly as well.
+** What about multithreading?
+   Multithreaded applications are hard.  But in this case it's worth
+   it - Clojure is designed for concurrency, and execution speed of
+   functional tests is important.
