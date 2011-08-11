@@ -120,6 +120,9 @@
 (defn result [test]
   (-> test report :result))
 
+(defn thread [test]
+  (-> test report :thread))
+
 (defn passed? [test]
   (= (result test) :pass))
 
@@ -169,13 +172,17 @@
                             [:testcase (info fail)
                              [:failure {:type (->  fail result class .getCanonicalName )
                                         :time (execution-time fail)
-                                        :message (-> fail result .getMessage)}
+                                        :message (format "On thread %s: %s"
+                                                         (thread fail)
+                                                         (-> fail result .getMessage))}
                               [:cdata! (-> fail result st/print-cause-trace with-out-str)]]])
                           (for [skip skips]
                             (let [reason (failed-pre skip)]
                               [:testcase (info skip)
                                [:skipped (if reason
-                                           {:message (str reason)}
+                                           {:message (format "On thread %s: %s"
+                                                             (thread skip)
+                                                             (str reason))}
                                            {})]]))
                           (for [pass passes]
                             [:testcase (info pass)]))]))))
@@ -207,11 +214,12 @@
                      true)
         deps-passed? (and dd-passed? (not failed-pre))]
     (deliver (@reports this-test)
-             (if (or (:always-run this-test)
-                     deps-passed?)
-               (execute-procedure this-test)
-               {:result :skip
-                :failed-pre failed-pre})))
+             (merge {:thread (.getName (Thread/currentThread))}
+                    (if (or (:always-run this-test)
+                            deps-passed?)
+                      (execute-procedure this-test)
+                      {:result :skip
+                       :failed-pre failed-pre}))))
   (println "result delivered: " (:name (zip/node tree)))
   (doseq [child-test (child-locs tree)]
     (queue child-test)))
