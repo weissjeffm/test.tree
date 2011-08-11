@@ -238,11 +238,9 @@
       (.offer @q (fn [] (run-test tree failed-pre))))))
 
 (defn run-allp [data]
-  (let [binding-map (or (-> data meta :binding-map) {})
+  (let [thread-runner (or (-> data meta :thread-runner) identity)
         setup (or (-> data meta :setup) (constantly nil))
         teardown (or (-> data meta :teardown) (constantly nil))
-        thread-setup (or (-> data meta :thread-setup) (constantly nil))
-        thread-teardown (or (-> data meta :thread-teardown) (constantly nil))
         numthreads (or (-> data meta :threads) 1)
         tree (test-zip data)] 
     
@@ -258,14 +256,8 @@
                          (teardown))]
       (setup)
       (doseq [agentnum (range numthreads)]
-        (.start (Thread.
-                 (fn []
-                   (with-bindings (zipmap (keys binding-map)
-                                          (map #(%) (vals binding-map)))
-                     (thread-setup)
-                     (consume)
-                     (thread-teardown)))
-                 (str "Test-clj-agent-" agentnum))))
+        (.start (Thread. (thread-runner consume)
+                         (str "test-clj-thread" agentnum))))
       (queue tree)
       end-wait)))
 
