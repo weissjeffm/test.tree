@@ -108,6 +108,10 @@
 (defn before-all [f n]
   (run-before (complement :configuration) f n))
 
+(defn wrap-graceful-exit [consume-fn]
+  (fn [] (try (consume-fn)
+              (catch Exception e (do (reset! q nil) (throw e))))))
+
 ;;
 ;;post-execution reporting functions
 ;;
@@ -264,14 +268,19 @@
                          (teardown))]
       (setup)
       (doseq [agentnum (range numthreads)]
-        (.start (Thread. (thread-runner consume)
+        (.start (Thread. (-> consume
+                             thread-runner
+                             wrap-graceful-exit)
                          (str "test-clj-thread" agentnum))))
       (queue tree)
       end-wait)))
 
 (defn run-suite [tests]
   @(run-allp tests)
-  (spit "junitreport.xml" (junit-report)))
+  (spit "junitreport.xml" (junit-report))
+  (spit "report.clj" (with-out-str
+                       (pprint/pprint (zipmap (keys @reports)
+                                              (map deref (vals @reports)))))))
 
 
  
@@ -310,5 +319,6 @@
                                 :more [{:name "final"
                                         :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]}
               {:threads 4
-               :binding-map {#'myvar gensym}}))
+               ;:thread-runner (fn [c] (throw (Exception. "waah")))
+               }))
 
