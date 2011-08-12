@@ -73,12 +73,13 @@
   [tests]
    (by-field :name tests))
 
-(defn unsatisfied [pred]
-  (fn [rootnode] (let [unsat (filter #(and (pred %1)
-                                          ((complement passed?) %1))
-                                    (nodes (test-zip rootnode)))]
-                  (if (= 0 (count unsat)) nil
-                      unsat))))
+(defn depends-on [pred]
+  (fn [rootnode]
+    (let [unsat (filter #(and (pred %1)
+                              ((complement passed?) %1))
+                        (nodes (test-zip rootnode)))]
+      (if (= 0 (count unsat)) nil
+          unsat))))
 
 (defn combine "combines two thunks into one, using juxt"
   [f g]
@@ -279,8 +280,12 @@
   @(run-allp tests)
   (spit "junitreport.xml" (junit-report))
   (spit "report.clj" (with-out-str
-                       (pprint/pprint (zipmap (keys @reports)
-                                              (map deref (vals @reports)))))))
+                       (binding [pprint/*print-right-margin* 120
+                                 pprint/*print-suppress-namespaces* true
+                                 pprint/*print-miser-width* 80]
+                         (pprint/pprint (map #(assoc %1 :report %2)
+                                             (keys @reports)
+                                             (map deref (vals @reports))))))))
 
 
  
@@ -306,13 +311,13 @@
                                        {:name "do that4"
                                         :steps (fn [] (Thread/sleep 4000) (println (str "there2.4 " myvar)))}
                                        {:name "do that5"
-                                        :pre (unsatisfied (by-name ["do the other"]))
+                                        :pre (depends-on (by-name ["do the other"]))
                                         :steps (fn [] (Thread/sleep 4000) (println "there2.5"))}
                                        {:name "do that6"
-                                        :pre (unsatisfied (by-name ["final"]))
+                                        :pre (depends-on (by-name ["final"]))
                                         :steps (fn [] (Thread/sleep 4000) (println (str "there2.6 " myvar)))}
                                        {:name "do that7"
-                                        :pre (unsatisfied (by-name ["do that2"]))
+                                        :pre (depends-on (by-name ["do that2"]))
                                         :steps (fn [] (Thread/sleep 4000) (println "there2.7"))}]}
                                {:name "borg4"
                                 :steps (fn [] (Thread/sleep 5000) (println "there4"))
