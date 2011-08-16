@@ -1,4 +1,4 @@
-(ns test-clj.core
+(ns test.tree
   (:require [clojure.zip :as zip]
             [clojure.pprint :as pprint]
             [clojure.stacktrace :as st]
