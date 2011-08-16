@@ -4,22 +4,33 @@
     flexible grouping and ordering of tests and their associated
     setups.  It is multithreaded and leverages Clojure's power as much
     as possible.
+    ** Sampling of supported scenarios:
+     + Run many tests in parallel.
+     + Generate data-driven tests
+     + Select, filter, and group tests by name, tag, or your own
+       custom function.
+     + Apply setup/teardown procedures to any selected tests.
+     + Produce junit format xml reports.
+     + Use test pre-conditions - skip tests if the precondition fails
+     + Get callbacks when tests start/end/pass/fail/skip
+     + Control depth of testing
 ** How do I use it?
    The requirements for a set of test-clj tests is a little bit
-   different than TestNG or nosetests.  Rather than specifying what
-   test to run by annotations, or other markings, tests are laid out
-   in a tree data structure directly.  This may sound rigid, but
-   Clojure makes manipulating this structure incredibly easy.  The
-   input to test-clj is a tree where each node is a test.  The tree
-   should be arranged with the following properties:
-   + Each level of the tree should be more and more detailed testing.
-     Each node will only be run if its parent passes.  Example: if you
-     were testing the gmail app, logging in would probably be at the
-     root, since not much else can be tested if that fails.  A test
-     that sends email with an attachment would be a descendant of a
-     test that sends a simple email with no attachment.  Deleting an
-     email from search results would be a descendant of a simple
-     search.
+   different than TestNG or nosetests.  Rather than annotating tests
+   with information about when they should run, test-clj traverses an
+   explicitly arranged tree of tests.  This may sound rigid, but
+   Clojure is so good at manipulating these data structures that it's
+   just as flexible as other tools, if not more so.  
+   The test tree really only has one important contract - that no
+   child test will be run before its parent.
+   + Each expanding level of the tree should be more and more detailed
+     testing.  Each node will only be run if its parent passes.
+     Example: if you were testing the gmail app, logging in would
+     probably be at the root, since not much else can be tested if
+     that fails.  A test that sends email with an attachment would be
+     a descendant of a test that sends a simple email with no
+     attachment.  Deleting an email from search results would be a
+     descendant of a simple search.
    + Each node is a map - it contains the test's name, a no-arg
      function that when called, runs the actual test, a list of child
      tests, and some optional properties.
@@ -32,14 +43,14 @@
      you should take precautions to avoid collisions in your app.  To
      go back to the gmail example, if there are 3 sibling tests:
   
-     1. Forward an email
-     2. Reply to an email
-     3. Delete an email
+      1. Forward an email
+      2. Reply to an email
+      3. Delete an email
        
-     They should not all try to operate on the same email!  Delete may
-     run first.  If a collision is possible, each test should either
-     create or check for its own resources as part of its procedure.
-     If you delib
+     They should not all try to operate on the same email!  'Delete'
+     may run first.  If a collision is possible, each test should
+     either create or check for its own resources as part of its
+     procedure.  
 ** Why do it that way?
    By arranging the tree by dependency, you get a lot for free.
    + Ability to control depth of testing.  If you have a suite of 1000
@@ -57,4 +68,7 @@
 ** What about multithreading?
    Multithreaded applications are hard.  But in this case it's worth
    it - Clojure is designed for concurrency, and execution speed of
-   functional tests is important.
+   functional tests is important.  If you arrange your tests by
+   dependency and avoid collisions of resources, then your tests
+   should be easily run in parallel.
+*** What if my test requires specific setup for each thread?

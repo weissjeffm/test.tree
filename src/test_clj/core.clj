@@ -143,8 +143,8 @@
                             (= (result t) :pass))) (keys @reports)))
 
 (defn failed-tests []
-  (filter (fn [n] (and (not (configuration? n))
-                      (isa? (class (result n)) Exception))) (keys @reports)))
+  (filter (fn [n] 
+            (isa? (class (result n)) Exception)) (keys @reports)))
 
 (defn execution-time [test]
   (let [report (-> (@reports test) deref)
