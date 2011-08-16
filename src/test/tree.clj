@@ -272,7 +272,7 @@
         (.start (Thread. (-> consume
                              thread-runner
                              wrap-graceful-exit)
-                         (str "test-clj-thread" agentnum))))
+                         (str "test.tree-thread" agentnum))))
       (queue tree)
       end-wait)))
 
@@ -285,7 +285,8 @@
                                  pprint/*print-miser-width* 80]
                          (pprint/pprint (map #(assoc %1 :report %2)
                                              (keys @reports)
-                                             (map deref (vals @reports))))))))
+                                             (map deref (vals @reports)))))))
+  @reports)
 
 
  
