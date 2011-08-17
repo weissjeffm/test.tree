@@ -16,7 +16,7 @@
     + Get callbacks when tests start/end/pass/fail/skip
     + Control depth of testing
 ** Example test suite
-   #+BEGIN_SRC clojure
+   #+BEGIN_SRC clojure -r
      (def gmail-tests  {:name "log in"
                         :steps (fn [] (login "user" "password"))
                         :more [{:name "send simple email"
