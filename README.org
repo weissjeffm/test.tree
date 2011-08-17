@@ -94,11 +94,11 @@
 ** Why do it that way?
 *** By arranging the tree by dependency, you get a lot for free.
      + Ability to control depth of testing.  If you have a suite of 1000
-     automated tests that take 8 hours to run, but you need to test a
-     patch very quickly and only have 1 hour, you just set maxtime to
-     1 hour, and test.tree descends as deeply into the tree as it can
-     in 1 hour.  That guarantees the most meaningful regression
-     testing in the amount of time available.
+       automated tests that take 8 hours to run, but you need to test a
+       patch very quickly and only have 1 hour, you just set maxtime to
+       1 hour, and test.tree descends as deeply into the tree as it can
+       in 1 hour.  That guarantees the most meaningful regression
+       testing in the amount of time available.
      + A list of your application's dependencies is maintained just as
        a side effect of having automated tests.  If someone wants to
        know what features need to be working in order to test feature
