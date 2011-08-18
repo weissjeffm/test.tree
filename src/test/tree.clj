@@ -89,6 +89,9 @@
                                    {::source (concat sf (drop 2 sg))}
                                    {})))))
 
+(defn combine-pre [f g]
+  (fn [t] (or (f t) (g t))))
+
 (defn matching-all-tags [ & tags]
   (fn [n] (some (set tags) (:tags n))))
 
@@ -105,6 +108,10 @@
   (->> (test-zip n)
        (walk-all-matching pred (partial before-test f))
        zip/root))
+
+(defn add-pre [f t]
+  (let [p (:pre t)]
+    (assoc t :pre (combine-pre p f))))
 
 (defn before-all [f n]
   (run-before (complement :configuration) f n))
@@ -223,8 +230,11 @@
                     (if (or (:always-run this-test)
                             deps-passed?)
                       (execute-procedure this-test)
-                      {:result :skip
-                       :failed-pre failed-pre}))))
+                      (let [timestamp (System/currentTimeMillis)]
+                        (merge {:result :skip
+                                :start-time timestamp
+                                :end-time timestamp}
+                               (if failed-pre {:failed-pre failed-pre} {})))))))
   (println "result delivered: " (:name (zip/node tree)))
   (doseq [child-test (child-locs tree)]
     (queue child-test)))
@@ -283,36 +293,39 @@
                        (binding [pprint/*print-right-margin* 120
                                  pprint/*print-suppress-namespaces* true
                                  pprint/*print-miser-width* 80]
-                         (pprint/pprint (map #(assoc %1 :report %2)
-                                             (keys @reports)
-                                             (map deref (vals @reports)))))))
+                         (pprint/pprint (sort-by (fn [item] (-> item :report :start-time))
+                                                 (map #(assoc %1 :report %2)
+                                                      (keys @reports)
+                                                      (map deref (vals @reports))))))))
   @reports)
 
 
  
 (def myvar "hi")
 
-(def sample (with-meta {:name "blah"
-                        :steps (fn [] (Thread/sleep 2000) (println "root"))
-                        :more [{:name "borg"
-                                :steps (fn [] (Thread/sleep 3000) (println "there") (throw (Exception. "woops"))) }
-                               {:name "borg3"
-                                :steps (fn [] (Thread/sleep 5000) (println (str "there3 " myvar )))
-                                :more [{:name "do the other"
-                                        :steps (fn [] (Thread/sleep 4000) (println "there3.1"))}]}
-                               {:name "borg2"
-                                :steps (fn [] (Thread/sleep 4000) (println "there2"))
-                                :more [{:name "do that"
-                                        :steps (fn [] (Thread/sleep 4000) (println "there2.1"))}
-                                       {:name "do that2"
-                                        :steps (fn [] (Thread/sleep 4000) (println "there2.2") (throw (Exception. "woops")))}
-                                       {:name "do that3"
-                                        :steps (fn [] (Thread/sleep 4000) (println "there2.3"))}
+(def sample (with-meta {:name "login"
+                        :steps (fn [] (Thread/sleep 2000) (println "logged in"))
+                        :more [{:name "create a widget"
+                                :steps (fn [] (Thread/sleep 3000) (println "widget created") (throw (Exception. "woops"))) }
+                               {:name "create a sprocket"
+                                :steps (fn [] (Thread/sleep 5000) (println (str "sprocket created " myvar )))
+                                :more [{:name "send a sprocket via email"
+                                        :steps (fn [] (Thread/sleep 4000) (println "sent sprocket"))}]}
+                               {:name "create a frob"
+                                :steps (fn [] (Thread/sleep 4000) (println "frob created"))
+                                :more [{:name "rename a frob"
+                                        :steps (fn [] (Thread/sleep 4000) (println "frob renamed"))}
+                                       {:name "delete a frob"
+                                        :steps (fn [] (Thread/sleep 4000)
+                                                 (throw (Exception. "woops, frob could not be deleted."))
+                                                 (println "frob deleted"))}
+                                       {:name "make sure 2 frobs can't have the same name"
+                                        :steps (fn [] (Thread/sleep 4000) (println "2nd frob rejected"))}
 
                                        {:name "do that4"
                                         :steps (fn [] (Thread/sleep 4000) (println (str "there2.4 " myvar)))}
                                        {:name "do that5"
-                                        :pre (depends-on (by-name ["do the other"]))
+                                        :pre (depends-on (by-name ["delete a frob"]))
                                         :steps (fn [] (Thread/sleep 4000) (println "there2.5"))}
                                        {:name "do that6"
                                         :pre (depends-on (by-name ["final"]))
