@@ -155,7 +155,7 @@
 
 (defn failed-tests []
   (filter (fn [n] 
-            (isa? (class (result n)) Exception)) (keys @reports)))
+            (isa? (class (result n)) Throwable)) (keys @reports)))
 
 (defn execution-time [test]
   (let [report (-> (@reports test) deref)
