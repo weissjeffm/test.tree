@@ -12,12 +12,16 @@
 (def reports (atom {}))
 (def done (atom nil))
 
+(defn print-meta [val]
+  {:type ::serializable-fn
+   ::source val})
+
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
                               "\n\n  Oh, but it also allows serialization!!!111eleven")}
           fn [& sigs]
           `(with-meta (clojure.core/fn ~@sigs)
-             {:type ::serializable-fn
-              ::source (quote ~&form)}))
+             (print-meta (quote ~&form))))
+
 
 (defmethod print-method ::serializable-fn [o ^Writer w]
   (print-method (::source (meta o)) w))
