@@ -353,7 +353,7 @@
                                 :steps (fn [] (Thread/sleep 5000) (println "there4"))
                                 :more [{:name "final"
                                         :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]}
-              {:threads} 4
+              {:threads 4}
                ;:thread-runner (fn [c] (throw (Exception. "waah")))
                ))
 
