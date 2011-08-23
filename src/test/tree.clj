@@ -3,12 +3,13 @@
             [clojure.pprint :as pprint]
             [clojure.stacktrace :as st]
             [clojure.contrib.prxml :as xml])
-  (:use [clojure.contrib.core :only [-?>]])
+  (:use [clojure.contrib.core :only [-?>]]
+        [pretzel.combine :only [every-p?]])
   (:refer-clojure :exclude [fn])
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
-(def q  (atom nil))
+(def q (atom nil))
 (def reports (atom {}))
 (def done (atom nil))
 
@@ -39,27 +40,35 @@
 
 (defn walk-all "Does a depth-first walk of the tree, passes each node thru f, and returns the tree"
   [f tree]
-  (first (drop-while (complement zip/end?)
-                     (iterate (fn [l]
-                                (let [new-l (zip/edit l f)] 
-                                  (zip/next new-l))) tree))))
+  (let [walk-fn (fn [l]
+                  (let [new-l (zip/edit l f)] 
+                    (zip/next new-l)))]
+    (->> tree
+         test-zip
+         (iterate walk-fn)
+         (drop-while (complement zip/end?))
+         first
+         zip/root)))
 
-(defn walk-all-matching [node-pred f tree]
-  (walk-all (fn [n] ((if (node-pred n) f
+(defn walk-all-matching [pred f tree]
+  (walk-all (fn [n] ((if (pred n) f
                         identity) n))
             tree))
 
-(defn plain-node [n]
-  (dissoc n :more))
+(defn plain-node [m]
+  (dissoc m :more))
 
-(defn child-locs [tree]
-  (take-while (fn [l] (some #{(and l (zip/node l))} 
-                           (zip/children tree)))
-              (iterate zip/right (zip/down tree))))
+(defn child-locs [z]
+  (let [is-child? (fn [loc] (some #{(and loc (zip/node loc))} 
+                                 (zip/children z)))]
+    (->> z
+         zip/down
+         (iterate zip/right)
+         (take-while is-child?))))
 
 (defn data-driven "Generate a set of n data-driven tests from a template
-                   test, a function f that takes p arguments, and a n by p list
-                   of lists containing the data for the tests."
+                   test, a function f that takes p arguments, and a n by p coll
+                   of colls containing the data for the tests."
   [test f data]
   (for [item data] (merge (or (meta data) {})
                           (assoc test
@@ -67,23 +76,24 @@
                             :parameters item))))
 
 (defn nodes [z]
-  (map (comp plain-node zip/node) (take-while #(not (zip/end? %)) (iterate zip/next z))))
+  (map (comp plain-node zip/node)
+       (take-while #(not (zip/end? %)) (iterate zip/next z))))
 
-(defn by-field [k vals]
+(defn by-key [k vals]
   (fn [n]
     (if n (some (set vals) [(n k)]))))
 
 (defn by-name
-  [tests]
-   (by-field :name tests))
+  [testnames]
+   (by-key :name testnames))
 
-(defn depends-on [pred]
-  (fn [rootnode]
-    (let [unsat (filter #(and (pred %1)
-                              ((complement passed?) %1))
-                        (nodes (test-zip rootnode)))]
-      (if (= 0 (count unsat)) nil
-          unsat))))
+(defn by-tag
+  [testtags]
+  (by-key :tags testtags))
+
+(defn filter-tests [pred]
+  (fn [z]
+    (filter pred (-> z zip/root test-zip nodes))))
 
 (defn combine "combines two thunks into one, using juxt"
   [f g]
@@ -93,11 +103,6 @@
                                    {::source (concat sf (drop 2 sg))}
                                    {})))))
 
-(defn combine-pre [f g]
-  (fn [t] (or (f t) (g t))))
-
-(defn matching-all-tags [ & tags]
-  (fn [n] (some (set tags) (:tags n))))
 
 (defn before-test "Run f before the steps of test node n" [f n]
   (let [s (:steps n)]
@@ -108,14 +113,12 @@
     (assoc n :steps (combine s f))))
 
 (defn run-before "Run f before every test that matches pred"
-  [pred f n]
-  (->> (test-zip n)
-       (walk-all-matching pred (partial before-test f))
-       zip/root))
+  [pred f tree]
+  (walk-all-matching pred (partial before-test f) tree))
 
-(defn add-pre [f t]
-  (let [p (:pre t)]
-    (assoc t :pre (combine-pre p f))))
+(defn add-pre [pred t]
+  (let [b (:blockers t)]
+    (assoc t :blockers (every-p? b pred))))
 
 (defn before-all [f n]
   (run-before (complement :configuration) f n))
@@ -128,10 +131,13 @@
 ;;post-execution reporting functions
 ;;
 (defn report [test]
-  @(@reports test))
+  (let [v (@reports test)]
+    (assert v)
+    (assert (deref v))
+    (deref v)))
 
-(defn failed-pre [test]
-  (-> test report :failed-pre))
+(defn blocked-by [test]
+  (-> test report :blocked-by))
 
 (defn result [test]
   (-> test report :result))
@@ -193,7 +199,7 @@
                                                          (-> fail result .getMessage))}
                               [:cdata! (-> fail result st/print-cause-trace with-out-str)]]])
                           (for [skip skips]
-                            (let [reason (failed-pre skip)]
+                            (let [reason (blocked-by skip)]
                               [:testcase (info skip)
                                [:skipped (if reason
                                            {:message (format "On thread %s: %s"
@@ -203,6 +209,7 @@
                           (for [pass passes]
                             [:testcase (info pass)]))]))))
 ;;test execution functions
+
 (defn execute [name proc]
   (proc))
 
@@ -211,36 +218,40 @@
                     :skip if a dependency failed, or an exception the test threw." 
   [test]    
   (let [start-time  (System/currentTimeMillis)]
-    {:result (try (execute (:name test)
-                           (:steps test))             ;test fn is called here
-                  :pass
-                  (catch Throwable t t)) 
-     :start-time start-time
-     :end-time (System/currentTimeMillis)}))
+    (merge (try {:returned (execute (:name test)
+                                    (:steps test)) ;test fn is called here
+                 :result :pass}
+                (catch Throwable t {:result t}))
+           {:start-time start-time
+            :end-time (System/currentTimeMillis)})))
 
 (declare queue)
 
-(defn run-test [tree failed-pre]
-  (println (str "running test: " (:name (zip/node tree))) )
-  
-  (let [this-test (-> tree zip/node plain-node)
-        direct-dep (zip/up tree)
-        dd-passed? (if direct-dep
-                     (passed? (-> direct-dep zip/node plain-node))
-                     true)
-        deps-passed? (and dd-passed? (not failed-pre))]
+(defn parent-blocker [z]
+  (let [parent (-?> z zip/up zip/node plain-node)]
+    (if (and parent
+             (not (passed? parent)))
+      [parent]
+      [])))
+    
+(defn run-test [z blockers]
+  (println (str "running test: " (:name (zip/node z))) )
+  (let [this-test (-> z zip/node plain-node)
+        all-blockers (concat blockers (parent-blocker z))
+        blocked? (-> all-blockers count (> 0))]
     (deliver (@reports this-test)
              (merge {:thread (.getName (Thread/currentThread))}
                     (if (or (:always-run this-test)
-                            deps-passed?)
+                            (not blocked?))
                       (execute-procedure this-test)
                       (let [timestamp (System/currentTimeMillis)]
                         (merge {:result :skip
                                 :start-time timestamp
                                 :end-time timestamp}
-                               (if failed-pre {:failed-pre failed-pre} {})))))))
-  (println "result delivered: " (:name (zip/node tree)))
-  (doseq [child-test (child-locs tree)]
+                               (if blocked?
+                                 {:blocked-by all-blockers} {}))))))
+    (println "result delivered: "  (str this-test)  (map #(.hashCode %) (vals this-test))))
+  (doseq [child-test (child-locs z)]
     (queue child-test)))
 
 (defn consume []
@@ -253,31 +264,29 @@
   (if-not @q (println "Queue reset, thread exiting.")
           (println "thread done.")))
 
-(defn queue [tree]
+(defn queue [z]
   (future
-    (let [failed-pre (try
-                       ((or (:pre (zip/node tree))
-                            (constantly nil))
-                        (zip/root tree))
-                       (catch Exception e e))
-          test (-> tree zip/node plain-node)]  
-      (println (str "queueing: " (:name test)))
-      (.offer @q (fn [] (run-test tree failed-pre))))))
+    (let [blockers (try
+                       ((or (-> z zip/node :blockers)
+                            (constantly []))  ;;default blocker fn returns empty list
+                         z)
+                       (catch Exception e [e]))]  
+      (println (str "queueing: " (-> z zip/node :name) " with blockers " blockers))
+      (.offer @q (fn [] (run-test z blockers))))))
 
-(defn run-allp [data]
-  (let [thread-runner (or (-> data meta :thread-runner) identity)
-        setup (or (-> data meta :setup) (constantly nil))
-        teardown (or (-> data meta :teardown) (constantly nil))
-        numthreads (or (-> data meta :threads) 1)
-        tree (test-zip data)] 
+(defn run-allp [tree]
+  (let [thread-runner (or (-> tree meta :thread-runner) identity)
+        setup (or (-> tree meta :setup) (constantly nil))
+        teardown (or (-> tree meta :teardown) (constantly nil))
+        numthreads (or (-> tree meta :threads) 1)
+        z (test-zip tree)] 
     
     (reset! q (LinkedBlockingQueue.))
     (reset! done false)
-    (reset! reports (zipmap (map plain-node (nodes tree))
+    (reset! reports (zipmap (nodes z)
                             (repeatedly promise)))
-    
     (let [end-wait (future ;;;when all reports are done, raise 'done' flag
-                               ;;;and do teardown
+                           ;;;and do teardown
                          (doall (map deref (vals @reports)))
                          (reset! done true) 
                          (teardown))]
@@ -287,11 +296,11 @@
                              thread-runner
                              wrap-graceful-exit)
                          (str "test.tree-thread" agentnum))))
-      (queue tree)
+      (queue z)
       end-wait)))
 
-(defn run-suite [tests]
-  @(run-allp tests)
+(defn run-suite [tree]
+  @(run-allp tree)
   (spit "junitreport.xml" (junit-report))
   (spit "report.clj" (with-out-str
                        (binding [pprint/*print-right-margin* 120
@@ -322,26 +331,29 @@
                                        {:name "delete a frob"
                                         :steps (fn [] (Thread/sleep 4000)
                                                  (throw (Exception. "woops, frob could not be deleted."))
-                                                 (println "frob deleted"))}
+                                                 (println "frob deleted"))
+                                        :more [{:name "undelete a frob"
+                                                :steps (fn [] (Thread/sleep 2000 (println "frob undeleted.")))}]}
                                        {:name "make sure 2 frobs can't have the same name"
                                         :steps (fn [] (Thread/sleep 4000) (println "2nd frob rejected"))}
 
                                        {:name "do that4"
                                         :steps (fn [] (Thread/sleep 4000) (println (str "there2.4 " myvar)))}
                                        {:name "do that5"
-                                        :pre (depends-on (by-name ["delete a frob"]))
+                                        :blockers (filter-tests (every-p? (by-name ["delete a frob"])
+                                                                          (complement passed?)))
                                         :steps (fn [] (Thread/sleep 4000) (println "there2.5"))}
                                        {:name "do that6"
-                                        :pre (depends-on (by-name ["final"]))
+                                        :blockers (filter-tests (every-p? (by-name  ["final"]) (complement passed?)))
                                         :steps (fn [] (Thread/sleep 4000) (println (str "there2.6 " myvar)))}
                                        {:name "do that7"
-                                        :pre (depends-on (by-name ["do that2"]))
+                                        :blockers (filter-tests (every-p? (by-name ["do that2"]) (complement passed?)))
                                         :steps (fn [] (Thread/sleep 4000) (println "there2.7"))}]}
                                {:name "borg4"
                                 :steps (fn [] (Thread/sleep 5000) (println "there4"))
                                 :more [{:name "final"
                                         :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]}
-              {:threads 4
+              {:threads} 4
                ;:thread-runner (fn [c] (throw (Exception. "waah")))
-               }))
+               ))
 

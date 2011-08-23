@@ -1,4 +1,5 @@
-(defproject test.tree "0.2.1-SNAPSHOT"
+(defproject test.tree "0.3.0-SNAPSHOT"
 	  :description "A testNG like test harness for clojure"
 	  :dependencies [[org.clojure/clojure "1.2.0"]
-			 [org.clojure/clojure-contrib "1.2.0"]])
+			 [org.clojure/clojure-contrib "1.2.0"]
+                         [pretzel "0.2.2"]])
