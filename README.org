@@ -16,7 +16,7 @@
     + Get callbacks when tests start/end/pass/fail/skip
     + Control depth of testing
 ** Example test suite
-   #+BEGIN_SRC emacs-lisp -r -l "##%s##"
+   #+BEGIN_EXAMPLE
      (def gmail-tests  {:name "log in"
                         :steps (fn [] (login "user" "password"))
                         :more [{:name "send simple email"
@@ -27,7 +27,7 @@
                                 :steps search/simple
                                 :more [{:name "search with boolean"
                                         :steps (fn [] (search "cat or dog"))}]}]})
-   #+END_SRC
+   #+END_EXAMPLE
 *** Items to note
     + *:name* can be any string (actually doesn't even have to be a string,
       but will be printed out later using str).
