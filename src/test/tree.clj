@@ -238,30 +238,30 @@
   (println (str "running test: " (:name (zip/node z))) )
   (let [this-test (-> z zip/node plain-node)
         all-blockers (concat blockers (parent-blocker z))
-        blocked? (-> all-blockers count (> 0))]
+        blocked? (-> all-blockers count (> 0))
+        report (merge {:thread (.getName (Thread/currentThread))}
+                      (if (or (:always-run this-test)
+                              (not blocked?))
+                        (execute-procedure this-test)
+                        (let [timestamp (System/currentTimeMillis)]
+                          (merge {:result :skip
+                                  :start-time timestamp
+                                  :end-time timestamp}
+                                 (if blocked?
+                                   {:blocked-by all-blockers} {})))))]
     (deliver (@reports this-test)
-             (merge {:thread (.getName (Thread/currentThread))}
-                    (if (or (:always-run this-test)
-                            (not blocked?))
-                      (execute-procedure this-test)
-                      (let [timestamp (System/currentTimeMillis)]
-                        (merge {:result :skip
-                                :start-time timestamp
-                                :end-time timestamp}
-                               (if blocked?
-                                 {:blocked-by all-blockers} {}))))))
-    (println "result delivered: "  (str this-test)  (map #(.hashCode %) (vals this-test))))
+             report)
+    (println "result delivered: "  this-test ": " (dissoc report :start-time :end-time)))
   (doseq [child-test (child-locs z)]
     (queue child-test)))
 
 (defn consume []
-  (println "thread consuming") 
   (while (and @q
               (not (and @done
                         (.isEmpty @q))))
     (if-let [next-item (.poll @q (long 500) TimeUnit/MILLISECONDS)]
       (next-item)))
-  (if-not @q (println "Queue reset, thread exiting.")
+  (if-not @q (println "queue reset, thread exiting.")
           (println "thread done.")))
 
 (defn queue [z]
@@ -271,7 +271,7 @@
                             (constantly []))  ;;default blocker fn returns empty list
                          z)
                        (catch Exception e [e]))]  
-      (println (str "queueing: " (-> z zip/node :name) " with blockers " blockers))
+      (println (str "queueing: " (-> z zip/node :name)))
       (.offer @q (fn [] (run-test z blockers))))))
 
 (defn run-allp [tree]
