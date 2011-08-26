@@ -251,7 +251,8 @@
                                    {:blocked-by all-blockers} {})))))]
     (deliver (@reports this-test)
              report)
-    (println "result delivered: "  this-test ": " (dissoc report :start-time :end-time)))
+    (println "report delivered: "  (:name this-test) ": "
+             (dissoc report :start-time :end-time)))
   (doseq [child-test (child-locs z)]
     (queue child-test)))
 
