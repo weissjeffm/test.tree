@@ -236,23 +236,26 @@
     
 (defn run-test [z blockers]
   (println (str "running test: " (:name (zip/node z))) )
-  (let [this-test (-> z zip/node plain-node)
-        all-blockers (concat blockers (parent-blocker z))
-        blocked? (-> all-blockers count (> 0))
-        report (merge {:thread (.getName (Thread/currentThread))}
-                      (if (or (:always-run this-test)
-                              (not blocked?))
-                        (execute-procedure this-test)
-                        (let [timestamp (System/currentTimeMillis)]
-                          (merge {:result :skip
-                                  :start-time timestamp
-                                  :end-time timestamp}
-                                 (if blocked?
-                                   {:blocked-by all-blockers} {})))))]
-    (deliver (@reports this-test)
-             report)
-    (println "report delivered: "  (:name this-test) ": "
-             (dissoc report :start-time :end-time)))
+  (let [this-test (-> z zip/node plain-node)]
+    (try (let [all-blockers (concat blockers (parent-blocker z))
+               blocked? (-> all-blockers count (> 0))
+               report (merge {:thread (.getName (Thread/currentThread))}
+                             (if (or (:always-run this-test)
+                                     (not blocked?))
+                               (execute-procedure this-test)
+                               (let [timestamp (System/currentTimeMillis)]
+                                 (merge {:result :skip
+                                         :start-time timestamp
+                                         :end-time timestamp}
+                                        (if blocked?
+                                          {:blocked-by all-blockers} {})))))]
+           (deliver (@reports this-test)
+                    report)
+           (println "report delivered: "  (:name this-test) ": "
+                    (dissoc report :start-time :end-time)))
+         (catch Exception e
+           (deliver (@reports this-test) {:result e})
+           (println "report delivered with error: "  (:name this-test) ": " e))))
   (doseq [child-test (child-locs z)]
     (queue child-test)))
 
@@ -294,8 +297,7 @@
       (setup)
       (doseq [agentnum (range numthreads)]
         (.start (Thread. (-> consume
-                             thread-runner
-                             wrap-graceful-exit)
+                             thread-runner)
                          (str "test.tree-thread" agentnum))))
       (queue z)
       end-wait)))
