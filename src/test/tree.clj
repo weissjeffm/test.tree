@@ -1,10 +1,10 @@
 (ns test.tree
   (:require [clojure.zip :as zip]
-            [clojure.pprint :as pprint]
-            [clojure.stacktrace :as st]
+            [clojure.pprint :as pprint] 
             [clojure.contrib.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]]
-        [pretzel.combine :only [every-p?]])
+        [pretzel.combine :only [every-p?]]
+        [clj-stacktrace.repl :only [pst-str]])
   (:refer-clojure :exclude [fn])
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
@@ -197,7 +197,7 @@
                                         :message (format "On thread %s: %s"
                                                          (thread fail)
                                                          (-> fail result .getMessage))}
-                              [:cdata! (-> fail result st/print-cause-trace with-out-str)]]])
+                              [:cdata! (-> fail result pst-str)]]])
                           (for [skip skips]
                             (let [reason (blocked-by skip)]
                               [:testcase (info skip)

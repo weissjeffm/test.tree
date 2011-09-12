@@ -2,4 +2,5 @@
 	  :description "A testNG like test harness for clojure"
 	  :dependencies [[org.clojure/clojure "1.2.0"]
 			 [org.clojure/clojure-contrib "1.2.0"]
-                         [pretzel "0.2.2"]])
+                         [pretzel "0.2.2"]
+                         [clj-stacktrace "0.2.3"]])
