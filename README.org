@@ -15,42 +15,6 @@
     + Use test pre-conditions - skip tests if the precondition fails
     + Get callbacks when tests start/end/pass/fail/skip
     + Control depth of testing
-** Example test suite
-   #+BEGIN_EXAMPLE
-     (def gmail-tests  {:name "log in"
-                        :steps (fn [] (login "user" "password"))
-                        :more [{:name "send simple email"
-                                :steps (fn [] (send-email :from "blah@blah.com" 
-                                                          :to "joe@blow.com"
-                                                          :subject "stuff")) }
-                               {:name "search for email"
-                                :steps search/simple
-                                :more [{:name "search with boolean"
-                                        :steps (fn [] (search "cat or dog"))}]}]})
-   #+END_EXAMPLE
-*** Items to note
-    + *:name* can be any string (actually doesn't even have to be a string,
-      but will be printed out later using str).
-    + *:steps* are always no arg function, aka 'thunk'.   
-    + *:more* is a list of child tests.  
-*** Optional keys
-    + *:pre* - a precondition function.  If the function returns nil,
-      that means the precondition passed, and the test will be run. If
-      it returns a value, it should be a list of reasons why the test
-      couldn't be run (will be collected later for a report of
-      blockages).  These "reasons" can be any type, but again strings
-      are probably best.  
-    + *:configuration* - if set to logical true, this test is just setup
-      or teardown for some other test (usually setup for its
-      children). All this does is prevent this test from being
-      reported in the results.  However if it throws an exception, it
-      will be reported as a test failure, and prevent its children
-      from running.
-    + *:always-run* - if set to logical true, run this test even if its
-      parent did not pass.  It will still be guaranteed to run after
-      its parent.  If it passes, its children will be run.  
-    + *:description* - a detailed description of the test.  Not
-      currently used for anything except to appear in the report.
 
 ** How do I use it?
    The requirements for a set of test.tree tests is a little bit
@@ -64,12 +28,11 @@
    that will make writing tests easier:
    + Each expanding level of the tree should be more and more detailed
      testing.  Each node will only be run if its parent passes.
-     *Example:* if you were testing the gmail app, logging in would
+     *See the example below* if you were testing the gmail app, logging in would
      probably be at the root of the tree, since not much else can be
-     tested if that fails.  A test that sends a simple email is a
-     parent, a test that sends an email with an attachment is a child.
-     Deleting an email from search results would be a child test of a
-     simple search test.
+     tested if that fails.  A test that sends a simple email could be
+     a child, a test that sends an email with an attachment could be a
+     grandchild node.
    + Each node is a map - it contains the test's name, a no-arg
      function that when called, runs the actual test, a list of child
      tests, and some optional properties.
@@ -91,7 +54,71 @@
      may run first.  If a collision is possible, each test should
      either create or check for its own resources as part of its
      procedure.  
-** Why do it that way?
+   
+** Example test suite
+   #+BEGIN_EXAMPLE
+   (def gmail-tests  
+    (with-meta
+     {:name "log in"
+      :steps (fn [] (login "user" "password"))
+      :more [{:name "send simple email"
+              :steps (fn [] (send-email :from "blah@blah.com" 
+                                        :to "joe@blow.com"
+                                        :subject "stuff"))
+              :more [{:name "send email with attachment"
+                      :steps (fn [] (send-email :from "blah@blah.com" 
+                                                :to "joe@blow.com"
+                                                :subject "stuff"
+                                                :attachment "/tmp/myfile"))}]}
+             {:name "search for email"
+              :steps search/simple
+              :more [{:name "search with boolean"
+                      :steps (fn [] (search "cat or dog"))}]}]}
+      
+     {:thread-runner mythreadrunner
+      :threads 3
+      :setup mysetup})
+   #+END_EXAMPLE
+*** Test keys
+    + *:name* can be any string (actually doesn't even have to be a string,
+      but will be printed out later using str).
+    + *:steps* are always no arg function, aka 'thunk'.   
+    + *:more* is a list of child tests.  
+*** Optional keys
+    + *:blockers* - A function that returns a list of items that are
+      blocking this test.  If this test should be skipped, this
+      function should return a list of reasons why it was skipped.
+      Reasons could include already-documented bugs, dependencies on
+      other tests (besides its tree ancestors, which are automatically
+      tracked). The type of each item returned by the function is up
+      to you, but generally strings or keywords work well.  
+    + *:configuration* - if set to logical true, this test is just setup
+      or teardown for some other test (usually setup for its
+      children). All this does is prevent this test from being
+      reported in the results.  However if it throws an exception, it
+      will be reported as a test failure, and prevent its children
+      from running.
+    + *:always-run* - if set to logical true, run this test even if its
+      parent did not pass.  It will still be guaranteed to run after
+      its parent.  If it passes, its children will be run.  
+    + *:description* - a detailed description of the test.  Not
+      currently used for anything except to appear in the report.
+*** Metadata keys
+    These are configuration options for the entire suite.  
+    + *:threads* The number of threads that will run tests - no more
+      than this number of tests will be run simultaneously.
+    + *:thread-runner* A function that takes 1 argument, also a
+      function.  This is used to do per-thread setup and teardown (if
+      necessary).  One example of where this might be used is for
+      browser testing, where a separate browser must be started for
+      each thread (and stopped when all tests are done).  This
+      function should perform any necessary setup, call the passed-in
+      function, and then perform any necessary cleanup.  You must call
+      the passed-in function - it kicks off actually running the
+      tests.
+    + *:setup* Any configuration that needs to be done before anything
+      else - reading from property files, logging setup, etc.
+** Why use a tree?
 *** By arranging the tree by dependency, you get a lot for free.
      + Ability to control depth of testing.  If you have a suite of 1000
        automated tests that take 8 hours to run, but you need to test a
@@ -105,10 +132,11 @@
        X, just look at your tree for the path from the root, to the
        test for feature X.  test.tree will actually just give you this
        information directly as well.
-** What about multithreading?
+** Why multithreaded?
    Multithreaded applications are hard.  But in this case it's worth
    it - Clojure is designed for concurrency, and execution speed of
    functional tests is important.  If you arrange your tests by
    dependency and avoid collisions of resources, then your tests
-   should be easily run in parallel.
-* 
+   should be easily run in parallel.  Of course, you can always
+   set :threads to 1, to disable multithreading.
+
