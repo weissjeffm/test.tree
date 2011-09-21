@@ -45,13 +45,13 @@
      take precautions to avoid collisions and discontinuity in your
      app.  To go back to the gmail example, if there are 3 sibling
      tests:
-     1. Forward an email
-     2. Reply to an email
-     3. Delete an email
-     They should not all try to operate on the same email!  'Delete'
-     may run first.  If a collision is possible, each test should
-     either create or check for its own resources as part of its
-     procedure.  
+      1. Forward an email
+      2. Reply to an email
+      3. Delete an email 
+         They should not all try to operate on the
+         same email!  'Delete' may run first.  If a collision is
+         possible, each test should either create or check for its own
+         resources as part of its procedure.
    
 ** Example test suite
    #+BEGIN_EXAMPLE
