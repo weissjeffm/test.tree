@@ -32,13 +32,15 @@
 ;;
 (declare passed?)
 
-(defn test-zip [tree] (zip/zipper (constantly true)
-                                  :more 
-                                  (fn [node children]
-                                    (with-meta (conj node {:more children}) (meta node)))
-                                    tree))
+(defn test-zip "Create a clojure.zip structure so the tree can be easily walked."
+  [tree] (zip/zipper (constantly true)
+                     :more 
+                     (fn [node children]
+                       (with-meta (conj node {:more children}) (meta node)))
+                     tree))
 
-(defn walk-all "Does a depth-first walk of the tree, passes each node thru f, and returns the tree"
+(defn walk-all "Does a depth-first walk of the tree, passes each node
+                thru f, and returns the tree"
   [f tree]
   (let [walk-fn (fn [l]
                   (let [new-l (zip/edit l f)] 
@@ -174,7 +176,9 @@
 (defn total-time []
   (reduce + (map execution-time (keys @reports))))
 
-(defn junit-report []
+(defn junit-report "Produce an xml report consistent with the
+                    junit report schema.  Tries to be especially
+                    compatible with Jenkins and ReportNG." []
   (let [fails (failed-tests)
         skips (skipped-tests)
         passes (passed-tests)
@@ -210,7 +214,8 @@
                             [:testcase (info pass)]))]))))
 ;;test execution functions
 
-(defn execute [name proc]
+(defn execute "Exists so that test start/return can be traced."
+  [name proc]
   (proc))
 
 (defn execute-procedure "Executes test, calls listeners, returns either :pass
@@ -259,7 +264,9 @@
   (doseq [child-test (child-locs z)]
     (queue child-test)))
 
-(defn consume []
+(defn consume "Starts polling the test queue, takes tests from the
+               queue and executes them one at a time."
+  []
   (while (and @q
               (not (and @done
                         (.isEmpty @q))))
@@ -268,7 +275,11 @@
   (if-not @q (println "queue reset, thread exiting.")
           (println "thread done.")))
 
-(defn queue [z]
+(defn queue "In a future, waits for the calculation of blockers for
+             the current test, and puts it on the queue.  Even if the
+             test turns out to be blocked, it won't be marked skipped
+             until it is consumed."
+  [z]
   (future
     (let [blockers (try
                        ((or (-> z zip/node :blockers)
@@ -302,8 +313,12 @@
       (queue z)
       end-wait)))
 
-(defn run-suite [tree]
-  @(run-allp tree)
+(defn run-suite "Run the test tree (blocking until all tests are
+                 complete) and return the reports list.  Also writes a
+                 junit report file to the current directory, and a
+                 clojure data file with all the results.  If you want
+                 to just run the tests without blocking, use run-allp."
+                 [tree] @(run-allp tree)
   (spit "junitreport.xml" (junit-report))
   (spit "report.clj" (with-out-str
                        (binding [pprint/*print-right-margin* 120
