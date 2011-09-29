@@ -77,6 +77,10 @@
                             :steps (with-meta (apply partial f item) (meta f))
                             :parameters item))))
 
+(defn dep-chain "Take a list of tests and nest them as a long tree branch"
+  [tests]
+  (vector (reduce #(assoc %2 :more [%1]) (reverse tests))))
+
 (defn nodes [z]
   (map (comp plain-node zip/node)
        (take-while #(not (zip/end? %)) (iterate zip/next z))))
