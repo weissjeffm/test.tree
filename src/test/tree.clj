@@ -222,7 +222,7 @@
                             [:testcase (info pass)]))]))))
 ;;test execution functions
 
-(defn execute-procedure "Executes test, calls listeners, returns either :pass
+(defn execute "Executes test, calls listeners, returns either :pass
                     if the test exits normally,
                     :skip if a dependency failed, or an exception the test threw." 
   [test]    
@@ -250,7 +250,7 @@
                report (merge {:thread (.getName (Thread/currentThread))}
                              (if (or (:always-run this-test)
                                      (not blocked?))
-                               (execute-procedure (plain-node this-test))
+                               (execute (plain-node this-test))
                                (let [timestamp (System/currentTimeMillis)]
                                  (merge {:result :skip
                                          :start-time timestamp
