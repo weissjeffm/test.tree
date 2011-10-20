@@ -222,17 +222,12 @@
                             [:testcase (info pass)]))]))))
 ;;test execution functions
 
-(defn execute "Exists so that test start/return can be traced."
-  [name proc]
-  (proc))
-
 (defn execute-procedure "Executes test, calls listeners, returns either :pass
                     if the test exits normally,
                     :skip if a dependency failed, or an exception the test threw." 
   [test]    
   (let [start-time  (System/currentTimeMillis)]
-    (merge (try {:returned (execute (:name test)
-                                    (:steps test)) ;test fn is called here
+    (merge (try {:returned ((:steps test)) ;test fn is called here
                  :result :pass}
                 (catch Throwable t {:result t}))
            {:start-time start-time
@@ -255,7 +250,7 @@
                report (merge {:thread (.getName (Thread/currentThread))}
                              (if (or (:always-run this-test)
                                      (not blocked?))
-                               (execute-procedure this-test)
+                               (execute-procedure (plain-node this-test))
                                (let [timestamp (System/currentTimeMillis)]
                                  (merge {:result :skip
                                          :start-time timestamp
@@ -312,7 +307,8 @@
                            ;;;and do teardown
                          (doall (map deref (vals @reports)))
                          (reset! done true) 
-                         (teardown))]
+                         (teardown)
+                         @reports)]
       (setup)
       (doseq [agentnum (range numthreads)]
         (.start (Thread. (-> consume
