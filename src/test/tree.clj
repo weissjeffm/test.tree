@@ -64,9 +64,9 @@
   (let [is-child? (fn [loc] (some #{(and loc (zip/node loc))} 
                                  (zip/children z)))]
     (->> z
-         zip/down
-         (iterate zip/right)
-         (take-while is-child?))))
+       zip/down
+       (iterate zip/right)
+       (take-while is-child?))))
 
 (defn data-driven "Generate a set of n data-driven tests from a
                    template test, a function f that takes p arguments,
@@ -284,7 +284,7 @@
              until it is consumed."
   [z]
   (future
-    (let [blockers (try
+    (let [blockers (try 
                        ((or (-> z zip/node :blockers)
                             (constantly []))  ;;default blocker fn returns empty list
                          z)
@@ -303,16 +303,16 @@
     (reset! done false)
     (reset! reports (zipmap (nodes z)
                             (repeatedly promise)))
-    (let [end-wait (future ;;;when all reports are done, raise 'done' flag
-                           ;;;and do teardown
-                         (doall (map deref (vals @reports)))
-                         (reset! done true) 
-                         (teardown)
-                         @reports)]
+    (let [end-wait (future ;;; when all reports are done, raise 'done' flag
+                           ;;; and do teardown
+                     (doall (map deref (vals @reports)))
+                     (reset! done true) 
+                     (teardown)
+                     @reports)]
       (setup)
       (doseq [agentnum (range numthreads)]
         (.start (Thread. (-> consume
-                             thread-runner)
+                            thread-runner)
                          (str "test.tree-thread" agentnum))))
       (queue z)
       end-wait)))
