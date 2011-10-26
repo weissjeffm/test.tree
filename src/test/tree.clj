@@ -1,7 +1,7 @@
 (ns test.tree
   (:require [clojure.zip :as zip]
             [clojure.pprint :as pprint] 
-            [clojure.data.xml :as xml])
+            [clojure.contrib.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]]
         [pretzel.combine :only [every-p?]]
         [clj-stacktrace.repl :only [pst-str]])
@@ -186,8 +186,7 @@
 
 (defn junit-report "Produce an xml report consistent with the
                     junit report schema.  Tries to be especially
-                    compatible with Jenkins and ReportNG."
-  []
+                    compatible with Jenkins and ReportNG." []
   (let [fails (failed-tests)
         skips (skipped-tests)
         passes (passed-tests)
@@ -197,31 +196,30 @@
                      :time (execution-time t)
                      :classname (:name t)})]
     (with-out-str
-      (xml/emit
-       (xml/sexp-as-element
-        [:testsuite {:tests (str total)
-                     :failures (str numfail)
-                     :errors "0"
-                     :skipped (str numskip)
-                     :time (str (total-time))}
-         (concat (for [fail fails]
-                   [:testcase (info fail)
-                    [:failure {:type (->  fail result class .getCanonicalName )
-                               :time (execution-time fail)
-                               :message (format "On thread %s: %s"
-                                                (thread fail)
-                                                (-> fail result .getMessage))}
-                      (-> fail result pst-str)]])
-                 (for [skip skips]
-                   (let [reason (blocked-by skip)]
-                     [:testcase (info skip)
-                      [:skipped (if reason
-                                  {:message (format "On thread %s: %s"
-                                                    (thread skip)
-                                                    (str reason))}
-                                  {})]]))
-                 (for [pass passes]
-                   [:testcase (info pass)]))])))))
+      (xml/prxml [:decl! {:version "1.0"} ]
+                 [:testsuite {:tests (str total)
+                              :failures (str numfail)
+                              :errors "0"
+                              :skipped (str numskip)
+                              :time (str (total-time))}
+                  (concat (for [fail fails]
+                            [:testcase (info fail)
+                             [:failure {:type (->  fail result class .getCanonicalName )
+                                        :time (execution-time fail)
+                                        :message (format "On thread %s: %s"
+                                                         (thread fail)
+                                                         (-> fail result .getMessage))}
+                              [:cdata! (-> fail result pst-str)]]])
+                          (for [skip skips]
+                            (let [reason (blocked-by skip)]
+                              [:testcase (info skip)
+                               [:skipped (if reason
+                                           {:message (format "On thread %s: %s"
+                                                             (thread skip)
+                                                             (str reason))}
+                                           {})]]))
+                          (for [pass passes]
+                            [:testcase (info pass)]))]))))
 ;;test execution functions
 
 (defn execute "Executes test, calls listeners, returns either :pass
