@@ -1,7 +1,8 @@
 (ns test.tree
   (:require [clojure.zip :as zip]
             [clojure.pprint :as pprint] 
-            [clojure.contrib.prxml :as xml])
+            [clojure.contrib.prxml :as xml]
+            [clojure.data :as data])
   (:use [clojure.contrib.core :only [-?>]]
         [pretzel.combine :only [every-p?]]
         [clj-stacktrace.repl :only [pst-str]])
@@ -10,9 +11,8 @@
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
 (def q (atom nil))
-(def reports (atom {}))
 (def done (atom nil))
-(def suite nil)
+(def suite (ref nil))
 
 (defn print-meta [val]
   {:type ::serializable-fn
@@ -40,6 +40,14 @@
               (fn [node children]
                 (with-meta (conj node {:more children}) (meta node)))
               tree))
+
+(defn path "Return a path to current node that can be used by get-in or update-in"
+  [z]
+  (->> (take-while identity (iterate zip/up z))
+     (map #(count (zip/lefts %)))
+     butlast
+     reverse
+     (interleave (repeat :more))))
 
 (defn walk-all "Does a depth-first walk of the tree, passes each node
                 thru f, and returns the tree"
@@ -152,24 +160,24 @@
   (-> test report :blocked-by))
 
 (defn result [test]
-  (-> test report :result))
+  (-> test report :status))
 
 (defn thread [test]
   (-> test report :thread))
 
 (defn passed? [test]
-  (= (result test) :pass))
+  (= (result test) :passed))
 
 (defn configuration? [test]
   (boolean (:configuration test)))
 
 (defn skipped-tests []
   (filter (fn [t] (and (not (configuration? t))
-                       (= (result t) :skip))) (keys @reports)))
+                       (= (result t) :skipped))) (keys @reports)))
 
 (defn passed-tests []
   (filter (fn [t] (and (not (configuration? t))
-                            (= (result t) :pass))) (keys @reports)))
+                            (= (result t) :passed))) (keys @reports)))
 
 (defn failed-tests []
   (filter (fn [n] 
@@ -224,14 +232,14 @@
                             [:testcase (info pass)]))]))))
 ;;test execution functions
 
-(defn execute "Executes test, calls listeners, returns either :pass
+(defn execute "Executes test, calls listeners, returns either :passed
                     if the test exits normally,
-                    :skip if a dependency failed, or an exception the test threw." 
+                    :skipped if a dependency failed, or an exception the test threw." 
   [test]    
   (let [start-time  (System/currentTimeMillis)]
     (merge (try {:returned ((:steps test)) ;test fn is called here
-                 :result :pass}
-                (catch Throwable t {:result t}))
+                 :status :passed}
+                (catch Throwable t {:status t}))
            {:start-time start-time
             :end-time (System/currentTimeMillis)})))
 
@@ -246,25 +254,29 @@
     
 (defn run-test [z blockers]
   (println (str "running test: " (:name (zip/node z))) )
-  (let [this-test (-> z zip/node plain-node)]
+  (let [this-test (-> z zip/node plain-node)
+        path-to-this-test (path z)]
     (try (let [all-blockers (concat blockers (parent-blocker z))
                blocked? (-> all-blockers count (> 0))
                report (merge {:thread (.getName (Thread/currentThread))}
                              (if (or (:always-run this-test)
                                      (not blocked?))
-                               (execute (plain-node this-test))
+                               (do
+                                 (dosync
+                                  (alter suite update-in path-to-this-test {:status :running}))
+                                 (execute (plain-node this-test)))
                                (let [timestamp (System/currentTimeMillis)]
-                                 (merge {:result :skip
+                                 (merge {:status :skipped
                                          :start-time timestamp
                                          :end-time timestamp}
                                         (if blocked?
                                           {:blocked-by all-blockers} {})))))]
-           (deliver (@reports this-test)
-                    report)
+           
+           (dosync (alter suite update-in path-to-this-test report))
            (println "report delivered: "  (:name this-test) ": "
                     (dissoc report :start-time :end-time)))
          (catch Exception e
-           (deliver (@reports this-test) {:result e})
+           (dosync (alter suite update-in path-to-this-test {:status e}))
            (println "report delivered with error: "  (:name this-test) ": " e))))
   (doseq [child-test (child-locs z)]
     (queue child-test)))
@@ -302,22 +314,14 @@
         z (test-zip tree)] 
     
     (reset! q (LinkedBlockingQueue.))
-    (reset! done false)
-    (reset! reports (zipmap (nodes z)
-                            (repeatedly promise)))
-    (let [end-wait (future ;;; when all reports are done, raise 'done' flag
-                           ;;; and do teardown
-                     (doall (map deref (vals @reports)))
-                     (reset! done true) 
-                     (teardown)
-                     @reports)]
-      (setup)
-      (doseq [agentnum (range numthreads)]
-        (.start (Thread. (-> consume
-                            thread-runner)
-                         (str "test.tree-thread" agentnum))))
-      (queue z)
-      end-wait)))
+    (dosync (ref-set suite tree))
+    
+    (setup)
+    (doseq [agentnum (range numthreads)]
+      (.start (Thread. (-> consume
+                          thread-runner)
+                       (str "test.tree-thread" agentnum))))
+    (queue z)))
 
 (defn run-suite "Run the test tree (blocking until all tests are
                  complete) and return the reports list.  Also writes a
@@ -381,9 +385,4 @@
                ;:thread-runner (fn [c] (throw (Exception. "waah")))
                ))
 
-(defn path [z]
-  (->> (take-while identity (iterate zip/up z))
-     (map #(count (zip/lefts %)))
-     butlast
-     reverse
-     (interleave (repeat :more))))
+
