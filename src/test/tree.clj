@@ -379,3 +379,9 @@
                ;:thread-runner (fn [c] (throw (Exception. "waah")))
                ))
 
+(comment [{:name "login"}
+  [{:name "simple email"}
+   [{:name "email w attach"}]]
+  {:name "search"}
+  [{:name "search w and"}
+   {:name "search w or"}]])
