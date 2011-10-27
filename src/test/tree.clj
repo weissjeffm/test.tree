@@ -12,6 +12,7 @@
 (def q (atom nil))
 (def reports (atom {}))
 (def done (atom nil))
+(def suite nil)
 
 (defn print-meta [val]
   {:type ::serializable-fn
@@ -33,11 +34,12 @@
 (declare passed?)
 
 (defn test-zip "Create a clojure.zip structure so the tree can be easily walked."
-  [tree] (zip/zipper (constantly true)
-                     :more 
-                     (fn [node children]
-                       (with-meta (conj node {:more children}) (meta node)))
-                     tree))
+  [tree]
+  (zip/zipper (constantly true)
+              :more 
+              (fn [node children]
+                (with-meta (conj node {:more children}) (meta node)))
+              tree))
 
 (defn walk-all "Does a depth-first walk of the tree, passes each node
                 thru f, and returns the tree"
@@ -46,11 +48,11 @@
                   (let [new-l (zip/edit l f)] 
                     (zip/next new-l)))]
     (->> tree
-         test-zip
-         (iterate walk-fn)
-         (drop-while (complement zip/end?))
-         first
-         zip/root)))
+       test-zip
+       (iterate walk-fn)
+       (drop-while (complement zip/end?))
+       first
+       zip/root)))
 
 (defn walk-all-matching [pred f tree]
   (walk-all (fn [n] ((if (pred n) f
@@ -379,9 +381,9 @@
                ;:thread-runner (fn [c] (throw (Exception. "waah")))
                ))
 
-(comment [{:name "login"}
-  [{:name "simple email"}
-   [{:name "email w attach"}]]
-  {:name "search"}
-  [{:name "search w and"}
-   {:name "search w or"}]])
+(defn path [z]
+  (->> (take-while identity (iterate zip/up z))
+     (map #(count (zip/lefts %)))
+     butlast
+     reverse
+     (interleave (repeat :more))))
