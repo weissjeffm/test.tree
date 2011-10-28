@@ -49,6 +49,19 @@
      reverse
      (interleave (repeat :more))))
 
+(defn diff-to-path "'Undoes' a diff - returns info necessary to update-in, (the path and what was added)
+                    Note: only works on changes that can be done with update-in + assoc"
+  [[a b both]]
+  (comment {:more [nil nil {:more [nil {:hi :there}]}]} :more 2 :more 1)
+  (let [idx (fn [m] (count (take-while nil? (:more m))))
+        nested (fn [m] (-> m :more last))
+        [path added] (loop [m b acc []]
+                       (comment (println m))
+                       (if (or (nil? m) (nil? (:more m)))
+                         [acc m]
+                         (recur (nested m) (conj acc (idx m)))))]
+    [(vec (interleave (repeat :more) path)) added]))
+
 (defn walk-all "Does a depth-first walk of the tree, passes each node
                 thru f, and returns the tree"
   [f tree]
@@ -143,9 +156,12 @@
 (defn before-all [f n]
   (run-before (complement :configuration) f n))
 
-(defn wrap-graceful-exit [consume-fn]
-  (fn [] (try (consume-fn)
-              (catch Exception e (do (reset! q nil) (throw e))))))
+
+;;
+;; listener functions
+;;
+
+
 
 ;;
 ;;post-execution reporting functions
@@ -340,10 +356,6 @@
                                                       (map deref (vals @reports))))))))
   @reports)
 
-
- 
-(def myvar "hi")
-
 (def sample (with-meta {:name "login"
                         :steps (fn [] (Thread/sleep 2000) (println "logged in"))
                         :more [{:name "create a widget"
@@ -384,5 +396,7 @@
               {:threads 4}
                ;:thread-runner (fn [c] (throw (Exception. "waah")))
                ))
+
+
 
 
