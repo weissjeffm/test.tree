@@ -1,6 +1,7 @@
 (ns test.tree
   (:require [clojure.zip :as zip]
-            [clojure.pprint :as pprint] 
+            [clojure.pprint :as pprint]
+            [clojure.data :as data]
             [clojure.contrib.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]]
         [pretzel.combine :only [every-p?]]
@@ -10,7 +11,7 @@
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
 (def q (atom nil))
-(def reports (atom {}))
+(def reports (ref {}))
 (def done (atom nil))
 
 (defn print-meta [val]
@@ -142,9 +143,8 @@
 ;;
 (defn report [test]
   (let [v (@reports test)]
-    (assert v)
-    (assert (deref v))
-    (deref v)))
+    @(:promise v)
+    (:report v)))
 
 (defn blocked-by [test]
   (-> test report :blocked-by))
@@ -174,9 +174,9 @@
             (isa? (class (result n)) Throwable)) (keys @reports)))
 
 (defn execution-time [test]
-  (let [report (-> (@reports test) deref)
-        start (report :start-time)
-        end (report :end-time)]
+  (let [r (report test)
+        start (r :start-time)
+        end (r :end-time)]
     (if (and start end)
       (/ (- end start) 1000.0)
       0)))
@@ -222,6 +222,9 @@
                             [:testcase (info pass)]))]))))
 ;;test execution functions
 
+(defn log-watcher [k r o n]
+  (println "Received event! " (second (data/diff o n))))
+
 (defn execute "Executes test, calls listeners, returns either :pass
                     if the test exits normally,
                     :skip if a dependency failed, or an exception the test threw." 
@@ -243,7 +246,7 @@
       [])))
     
 (defn run-test [z blockers]
-  (println (str "running test: " (:name (zip/node z))) )
+  (comment (println (str "running test: " (:name (zip/node z))) ))
   (let [this-test (-> z zip/node plain-node)]
     (try (let [all-blockers (concat blockers (parent-blocker z))
                blocked? (-> all-blockers count (> 0))
@@ -257,12 +260,18 @@
                                          :end-time timestamp}
                                         (if blocked?
                                           {:blocked-by all-blockers} {})))))]
-           (deliver (@reports this-test)
-                    report)
-           (println "report delivered: "  (:name this-test) ": "
-                    (dissoc report :start-time :end-time)))
+           (dosync
+            (alter reports update-in [this-test] merge {:status :done
+                                                        :report report}))
+
+           (comment (println "Adding report" (@reports this-test)))
+           (deliver (:promise (@reports this-test))
+                    :done)
+           (comment (println "report delivered: "  (:name this-test) ": "
+                     (dissoc report :start-time :end-time))))
          (catch Exception e
-           (deliver (@reports this-test) {:result e})
+           (deliver (:promise (@reports this-test))
+                    e)
            (println "report delivered with error: "  (:name this-test) ": " e))))
   (doseq [child-test (child-locs z)]
     (queue child-test)))
@@ -289,23 +298,36 @@
                             (constantly []))  ;;default blocker fn returns empty list
                          z)
                        (catch Exception e [e]))]  
-      (println (str "queueing: " (-> z zip/node :name)))
-      (.offer @q (fn [] (run-test z blockers))))))
+      (comment (println (str "queueing: " (-> z zip/node :name))))
+      (.offer @q (fn [] (run-test z blockers)))
+      (dosync
+       (alter reports
+              assoc-in [(-> z zip/node plain-node) :status] :queued)))))
 
 (defn run-allp [tree]
   (let [thread-runner (or (-> tree meta :thread-runner) identity)
         setup (or (-> tree meta :setup) (constantly nil))
         teardown (or (-> tree meta :teardown) (constantly nil))
         numthreads (or (-> tree meta :threads) 1)
+        watchers (or (-> tree meta :watchers) {})
         z (test-zip tree)] 
     
     (reset! q (LinkedBlockingQueue.))
     (reset! done false)
-    (reset! reports (zipmap (nodes z)
-                            (repeatedly promise)))
+
+    ;;initialize reports
+    (dosync (ref-set reports
+                     (zipmap (nodes z)
+                             (repeatedly (fn [] {:status :waiting
+                                                :promise (promise)})))))
+    ;;watch reports
+    (doseq [[k v] watchers]
+      (add-watch reports k v))
+    
     (let [end-wait (future ;;; when all reports are done, raise 'done' flag
                            ;;; and do teardown
-                     (doall (map deref (vals @reports)))
+                     (doseq [v (vals @reports)]
+                       (-> v :promise deref))
                      (reset! done true) 
                      (teardown)
                      @reports)]
@@ -337,6 +359,13 @@
 
  
 (def myvar "hi")
+
+(defn status-watcher [stat f]
+  (fn [k r old new]
+    (let [[_ b _] (data/diff old new)]
+      (doseq [[k v] b]
+        (when (= (:status v) stat)
+          (f k v))))))
 
 (def sample (with-meta {:name "login"
                         :steps (fn [] (Thread/sleep 2000) (println "logged in"))
@@ -375,7 +404,10 @@
                                 :steps (fn [] (Thread/sleep 5000) (println "there4"))
                                 :more [{:name "final"
                                         :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]}
-              {:threads 4}
+              {:threads 4
+               :watchers {:onFinish (status-watcher
+                                     :done (fn [t r]
+                                             (println (format "Test %s: %s" (:name t) (-> r :report :result)))))}}
                ;:thread-runner (fn [c] (throw (Exception. "waah")))
                ))
 
