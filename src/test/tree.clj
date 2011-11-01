@@ -4,7 +4,6 @@
             [clojure.data :as data]
             [clojure.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]]
-        [pretzel.combine :only [every-p?]]
         [clj-stacktrace.repl :only [pst-str]])
   (:refer-clojure :exclude [fn])
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
@@ -129,7 +128,7 @@
 
 (defn add-pre [pred t]
   (let [b (:blockers t)]
-    (assoc t :blockers (every-p? b pred))))
+    (assoc t :blockers (every-pred b pred))))
 
 (defn before-all [f n]
   (run-before (complement :configuration) f n))
