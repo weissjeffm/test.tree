@@ -2,7 +2,7 @@
   (:require [clojure.zip :as zip]
             [clojure.pprint :as pprint]
             [clojure.data :as data]
-            [clojure.contrib.prxml :as xml])
+            [clojure.prxml :as xml])
   (:use [clojure.contrib.core :only [-?>]]
         [pretzel.combine :only [every-p?]]
         [clj-stacktrace.repl :only [pst-str]])
@@ -353,12 +353,24 @@
                          (pprint/pprint (sort-by (fn [item] (-> item :report :start-time))
                                                  (map #(assoc %1 :report %2)
                                                       (keys @reports)
-                                                      (map deref (vals @reports))))))))
+                                                      (vals @reports)))))))
   @reports)
 
 
  
 (def myvar "hi")
+
+(defn watch-on-pred [pred f]
+  (fn [k r old new]
+    (let [[_ b _] (data/diff old new)]
+      (doseq [[k v] b]
+        (when (pred k v)
+          (f k v))))))
+
+(defn on-fail "create a watcher that will call f when a test fails." [f]
+  (watch-on-pred (fn [t r] (and (isa? (-> r :report :result class) Throwable)
+                               (not (configuration? t))))
+                 f))
 
 (defn status-watcher [stat f]
   (fn [k r old new]
@@ -405,9 +417,10 @@
                                 :more [{:name "final"
                                         :steps (fn [] (Thread/sleep 4000) (println "there4.1"))}]}]}
               {:threads 4
-               :watchers {:onFinish (status-watcher
-                                     :done (fn [t r]
-                                             (println (format "Test %s: %s" (:name t) (-> r :report :result)))))}}
+               :watchers {
+                          ;; :logs log-watcher
+                          :onfail (on-fail
+                                    (fn [t r] (println (format "Test %s failed!" (:name t)))))}}
                ;:thread-runner (fn [c] (throw (Exception. "waah")))
                ))
 
