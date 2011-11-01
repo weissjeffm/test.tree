@@ -3,7 +3,7 @@
             [clojure.pprint :as pprint]
             [clojure.data :as data]
             [clojure.prxml :as xml])
-  (:use [clojure.contrib.core :only [-?>]]
+  (:use [clojure.core.incubator :only [-?>]]
         [clj-stacktrace.repl :only [pst-str]])
   (:refer-clojure :exclude [fn])
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
@@ -402,14 +402,14 @@
                                        {:name "do that4"
                                         :steps (fn [] (Thread/sleep 4000) (println (str "there2.4 " myvar)))}
                                        {:name "do that5"
-                                        :blockers (filter-tests (every-p? (by-name ["delete a frob"])
+                                        :blockers (filter-tests (every-pred (by-name ["delete a frob"])
                                                                           (complement passed?)))
                                         :steps (fn [] (Thread/sleep 4000) (println "there2.5"))}
                                        {:name "do that6"
-                                        :blockers (filter-tests (every-p? (by-name  ["final"]) (complement passed?)))
+                                        :blockers (filter-tests (every-pred (by-name  ["final"]) (complement passed?)))
                                         :steps (fn [] (Thread/sleep 4000) (println (str "there2.6 " myvar)))}
                                        {:name "do that7"
-                                        :blockers (filter-tests (every-p? (by-name ["do that2"]) (complement passed?)))
+                                        :blockers (filter-tests (every-pred (by-name ["do that2"]) (complement passed?)))
                                         :steps (fn [] (Thread/sleep 4000) (println "there2.7"))}]}
                                {:name "borg4"
                                 :steps (fn [] (Thread/sleep 5000) (println "there4"))
