@@ -2,24 +2,28 @@
   (:require [clojure.zip :as zip])
   (:refer-clojure :exclude [fn]))
 
+;;;
+;;; Serializable fn for printing out what test steps actually do,
+;;; based on technomancy's serializable.fn
+;;;
+
 (defn print-meta [val]
-  {:type ::serializable-fn
+  {:type ::serializable-fn 
    ::source val})
 
 (defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
-                              "\n\n  Oh, but it also allows serialization!!!111eleven")}
-          fn [& sigs]
-          `(with-meta (clojure.core/fn ~@sigs)
-             (print-meta (quote ~&form))))
+                  "\n\n  Oh, but it also allows serialization!!!111eleven")}
+  fn [& sigs]
+  `(with-meta (clojure.core/fn ~@sigs)
+     (print-meta (quote ~&form))))
 
 
 (defmethod print-method ::serializable-fn [o ^java.io.Writer w]
   (print-method (::source (meta o)) w))
 
-;;
-;;pre-execution test manipulation functions
-;;
-(declare passed?)
+;;;
+;;; pre-execution test manipulation functions
+;;;
 
 (defn test-zip "Create a clojure.zip structure so the tree can be easily walked."
   [tree] (zip/zipper (constantly true)
@@ -28,8 +32,8 @@
                        (with-meta (conj node {:more children}) (meta node)))
                      tree))
 
-(defn walk-all "Does a depth-first walk of the tree, passes each node
-                thru f, and returns the tree"
+(defn tmap "Does a depth-first walk of the tree, passes each node thru
+            f, and returns the tree"
   [f tree]
   (let [walk-fn (fn [l]
                   (let [new-l (zip/edit l f)] 
@@ -41,8 +45,8 @@
          first
          zip/root)))
 
-(defn walk-all-matching [pred f tree]
-  (walk-all (fn [n] ((if (pred n) f
+(defn alter-nodes-matching [pred f tree]
+  (tmap (fn [n] ((if (pred n) f
                         identity) n))
             tree))
 
@@ -82,11 +86,11 @@
   (fn [n]
     (if n (some (set vals) [(n k)]))))
 
-(defn by-name
+(defn named?
   [testnames]
    (by-key :name testnames))
 
-(defn by-tag
+(defn tagged?
   [testtags]
   (by-key :tags testtags))
 
@@ -113,7 +117,7 @@
 
 (defn run-before "Run f before every test that matches pred"
   [pred f tree]
-  (walk-all-matching pred (partial before-test f) tree))
+  (alter-nodes-matching pred (partial before-test f) tree))
 
 (defn before-all [f n]
   (run-before (complement :configuration) f n))

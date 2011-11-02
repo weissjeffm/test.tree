@@ -1,7 +1,8 @@
 (ns test.tree.reporter
   (:require [clojure.prxml :as xml])
-  (:use [test.tree :only [reports]]
-        [clj-stacktrace.repl :only [pst-str]]))
+  (:use [clj-stacktrace.repl :only [pst-str]]))
+
+(def reports (ref {}))
 
 (defn report [test]
   (let [v (@reports test)]

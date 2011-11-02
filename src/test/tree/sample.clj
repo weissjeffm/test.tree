@@ -29,14 +29,14 @@
                                        {:name "do that4"
                                         :steps (fn [] (Thread/sleep 4000) (println (str "there2.4 " myvar)))}
                                        {:name "do that5"
-                                        :blockers (builder/filter-tests (every-pred (by-name ["delete a frob"])
+                                        :blockers (builder/filter-tests (every-pred (named? ["delete a frob"])
                                                                           (complement reporter/passed?)))
                                         :steps (fn [] (Thread/sleep 4000) (println "there2.5"))}
                                        {:name "do that6"
-                                        :blockers (builder/filter-tests (every-pred (by-name  ["final"]) (complement reporter/passed?)))
+                                        :blockers (builder/filter-tests (every-pred (named?  ["final"]) (complement reporter/passed?)))
                                         :steps (fn [] (Thread/sleep 4000) (println (str "there2.6 " myvar)))}
                                        {:name "do that7"
-                                        :blockers (builder/filter-tests (every-pred (by-name ["do that2"]) (complement reporter/passed?)))
+                                        :blockers (builder/filter-tests (every-pred (named? ["do that2"]) (complement reporter/passed?)))
                                         :steps (fn [] (Thread/sleep 4000) (println "there2.7"))}]}
                                {:name "borg4"
                                 :steps (fn [] (Thread/sleep 5000) (println "there4"))

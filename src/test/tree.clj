@@ -1,15 +1,15 @@
 (ns test.tree
   (:require [clojure.zip :as zip]
-            [clojure.pprint :as pprint]
-            
-            )
-  (:use [clojure.core.incubator :only [-?>]])
+            [clojure.pprint :as pprint])
+  (:use [clojure.core.incubator :only [-?>]]
+        [test.tree.builder :only [plain-node child-locs test-zip nodes]]
+        [test.tree.reporter :only [passed? reports junit-report]])
   
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
 (def q (atom nil))
-(def reports (ref {}))
+
 (def done (atom nil))
 
 ;;
