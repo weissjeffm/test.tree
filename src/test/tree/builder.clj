@@ -61,21 +61,18 @@
        (iterate zip/right)
        (take-while is-child?))))
 
-(defn data-driven "Generate a set of data-driven tests.  Arguments are
-                   a test template, a function that accepts arguments
-                   that will perform the test on each entry, and a
-                   no-arg function that will yield the data for the
-                   test (a collection of collections).
-                   Example: (data-driven {:name 'add'}
-                   (fn [sum & addends] (assert (= sum (apply + addends))))
-                   (fn [] [[3 1 2]  [0 -1 1] [10 1 2 3 4]]))"
-  [test-template f data-yield-fn]
-  (let [data (data-yield-fn)]
-    (for [item data] (merge (or (meta data) {})
-                            (or (meta item) {})
-                            (assoc test-template
-                              :steps (with-meta (apply partial f item) (meta f))
-                              :parameters item)))))
+(defn data-driven "Generate a set of n data-driven tests from a
+                   template test, a function f that takes p arguments,
+                   and a n by p coll of colls containing the data for
+                   the tests. The metadata on either the overall set,
+                   or rows of data, will be extracted and merged with
+                   the tests"
+  [test f data]
+  (for [item data] (merge (or (meta data) {})
+                          (or (meta item) {})
+                          (assoc test
+                            :steps (with-meta (apply partial f item) (meta f))
+                            :parameters item))))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]
