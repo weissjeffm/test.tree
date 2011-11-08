@@ -71,7 +71,7 @@
   (for [item data] (merge (or (meta data) {})
                           (or (meta item) {})
                           (assoc test
-                            :steps (with-meta (apply partial f item) (meta f))
+                            :steps (with-meta (fn [] (apply f item)) (meta f))
                             :parameters item))))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
