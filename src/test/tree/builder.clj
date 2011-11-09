@@ -17,7 +17,6 @@
   `(with-meta (clojure.core/fn ~@sigs)
      (print-meta (quote ~&form))))
 
-
 (defmethod print-method ::serializable-fn [o ^java.io.Writer w]
   (print-method (::source (meta o)) w))
 
@@ -68,11 +67,14 @@
                    or rows of data, will be extracted and merged with
                    the tests"
   [test f data]
-  (for [item data] (merge (or (meta data) {})
-                          (or (meta item) {})
-                          (assoc test
-                            :steps (with-meta (fn [] (apply f item)) (meta f))
-                            :parameters item))))
+  (for [item data]
+    (merge (or (meta data) {})
+           (or (meta item) {})
+           (assoc test
+             :steps (with-meta (fn []
+                                 (apply f (if (fn? item) (item) item)))
+                      (meta f))
+             :parameters item))))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]
