@@ -9,20 +9,12 @@
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
 (def q (atom nil))
-
 (def done (atom nil))
 
-;;
-;;post-execution reporting functions
-;;
-;;test execution functions
-
-
-
-(defn execute "Executes test, calls listeners, returns either :pass
-                    if the test exits normally,
-                    :skip if a dependency failed, or an exception the test threw." 
-  [test]    
+(defn execute "Executes test, returns either :pass if the test exits
+               normally, :skip if a dependency failed, or an exception
+               the test threw."
+  [test]
   (let [start-time  (System/currentTimeMillis)]
     (merge (try {:returned ((:steps test)) ;test fn is called here
                  :result :pass}
@@ -30,17 +22,19 @@
            {:start-time start-time
             :end-time (System/currentTimeMillis)})))
 
-(declare queue)
-
-(defn parent-blocker [z]
+(defn parent-blocker "Returns a list of parent nodes blocking this
+                      test (since each node only has one parent, it
+                      will either be empty or have 1 item, the parent
+                      test)"
+  [z]
   (let [parent (-?> z zip/up zip/node plain-node)]
-    (if (and parent
-             (not (passed? parent)))
+    (if (and parent (not (passed? parent)))
       [parent]
       [])))
-    
+
+(declare queue)
+
 (defn run-test [z blockers]
-  (comment (println (str "running test: " (:name (zip/node z))) ))
   (let [this-test (-> z zip/node plain-node)]
     (try (let [all-blockers (concat blockers (parent-blocker z))
                blocked? (-> all-blockers count (> 0))
@@ -55,17 +49,12 @@
                                         (if blocked?
                                           {:blocked-by all-blockers} {})))))]
            (dosync
-            (alter reports update-in [this-test] merge {:status :done
-                                                        :report report}))
-
-           (comment (println "Adding report" (@reports this-test)))
-           (deliver (:promise (@reports this-test))
-                    :done)
-           (comment (println "report delivered: "  (:name this-test) ": "
-                     (dissoc report :start-time :end-time))))
+            (alter reports update-in [this-test]
+                   merge {:status :done
+                          :report report}))
+           (deliver (:promise (@reports this-test)) :done))
          (catch Exception e
-           (deliver (:promise (@reports this-test))
-                    e)
+           (deliver (:promise (@reports this-test)) e)
            (println "report delivered with error: "  (:name this-test) ": " e))))
   (doseq [child-test (child-locs z)]
     (queue child-test)))
@@ -73,9 +62,7 @@
 (defn consume "Starts polling the test queue, takes tests from the
                queue and executes them one at a time."
   []
-  (while (and @q
-              (not (and @done
-                        (.isEmpty @q))))
+  (while (and @q (not (and @done (.isEmpty @q))))
     (if-let [next-item (.poll @q (long 500) TimeUnit/MILLISECONDS)]
       (next-item)))
   (if-not @q (println "queue reset, thread exiting.")
@@ -87,18 +74,19 @@
              until it is consumed."
   [z]
   (future
-    (let [blockers (try 
-                       ((or (-> z zip/node :blockers)
-                            (constantly []))  ;;default blocker fn returns empty list
+    (let [blockers (try ((or (-> z zip/node :blockers)
+                             (constantly []))  ;;default blocker fn returns empty list
                          z)
                        (catch Exception e [e]))]  
-      (comment (println (str "queueing: " (-> z zip/node :name))))
       (.offer @q (fn [] (run-test z blockers)))
       (dosync
-       (alter reports
-              assoc-in [(-> z zip/node plain-node) :status] :queued)))))
+       (alter reports assoc-in [(-> z zip/node plain-node) :status] :queued)))))
 
-(defn run-allp [tree]
+(defn run-allp "Runs all tests in the tree, in parallel (if threads
+                are set >1).  Returns a future object that when
+                deref'd will block until all tests are done, and
+                return reports data."
+  [tree]
   (let [thread-runner (or (-> tree meta :thread-runner) identity)
         setup (or (-> tree meta :setup) (constantly nil))
         teardown (or (-> tree meta :teardown) (constantly nil))
@@ -110,10 +98,10 @@
     (reset! done false)
 
     ;;initialize reports
-    (dosync (ref-set reports
-                     (zipmap (nodes z)
-                             (repeatedly (fn [] {:status :waiting
-                                                :promise (promise)})))))
+    (dosync
+     (ref-set reports (zipmap (nodes z)
+                              (repeatedly (fn [] {:status :waiting
+                                                 :promise (promise)})))))
     ;;watch reports
     (doseq [[k v] watchers]
       (add-watch reports k v))
@@ -138,16 +126,18 @@
                  junit report file to the current directory, and a
                  clojure data file with all the results.  If you want
                  to just run the tests without blocking, use run-allp."
-                 [tree] @(run-allp tree)
+  [tree]
+  @(run-allp tree)
   (spit "junitreport.xml" (junit-report))
-  (spit "report.clj" (with-out-str
-                       (binding [pprint/*print-right-margin* 120
-                                 pprint/*print-suppress-namespaces* true
-                                 pprint/*print-miser-width* 80]
-                         (pprint/pprint (sort-by (fn [item] (-> item :report :start-time))
-                                                 (map #(assoc %1 :report %2)
-                                                      (keys @reports)
-                                                      (vals @reports)))))))
+  (spit "report.clj"
+        (with-out-str
+          (binding [pprint/*print-right-margin* 120
+                    pprint/*print-suppress-namespaces* true
+                    pprint/*print-miser-width* 80]
+            (pprint/pprint (sort-by (fn [item] (-> item :report :start-time))
+                                    (map #(assoc %1 :report %2)
+                                         (keys @reports)
+                                         (vals @reports)))))))
   @reports)
 
 

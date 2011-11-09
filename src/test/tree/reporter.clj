@@ -49,13 +49,14 @@
 
 (defn junit-report "Produce an xml report consistent with the
                     junit report schema.  Tries to be especially
-                    compatible with Jenkins and ReportNG." []
+                    compatible with Jenkins and ReportNG."
+  []
   (let [fails (failed-tests)
         skips (skipped-tests)
         passes (passed-tests)
         [numfail numskip numpass] (map count [fails skips passes])
         total (+ numfail numskip numpass)
-        info (fn [t] {:name (or (:parameters t) (:name t))
+        info (fn [t] {:name (or (pr-str (:parameters t)) (:name t))
                      :time (execution-time t)
                      :classname (:name t)})]
     (with-out-str

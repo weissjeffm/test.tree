@@ -24,30 +24,30 @@
 ;;; pre-execution test manipulation functions
 ;;;
 
-(defn test-zip "Create a clojure.zip structure so the tree can be easily walked."
-  [tree] (zip/zipper (constantly true)
-                     :more 
-                     (fn [node children]
-                       (with-meta (conj node {:more children}) (meta node)))
-                     tree))
+(defn test-zip "Create a clojure.zip structure so the tree can be
+                easily walked."
+  [tree]
+  (zip/zipper (constantly true)
+              :more 
+              (fn [node children]
+                (with-meta (conj node {:more children}) (meta node)))
+              tree))
 
 (defn tmap "Does a depth-first walk of the tree, passes each node thru
             f, and returns the tree"
   [f tree]
-  (let [walk-fn (fn [l]
-                  (let [new-l (zip/edit l f)] 
-                    (zip/next new-l)))]
+  (let [walk-fn (fn [l] (let [new-l (zip/edit l f)] 
+                         (zip/next new-l)))]
     (->> tree
-         test-zip
-         (iterate walk-fn)
-         (drop-while (complement zip/end?))
-         first
-         zip/root)))
+       test-zip
+       (iterate walk-fn)
+       (drop-while (complement zip/end?))
+       first
+       zip/root)))
 
 (defn alter-nodes-matching [pred f tree]
-  (tmap (fn [n] ((if (pred n) f
-                        identity) n))
-            tree))
+  (tmap (fn [n] ((if (pred n) f identity) n))
+        tree))
 
 (defn plain-node [m]
   (dissoc m :more))
@@ -55,10 +55,7 @@
 (defn child-locs [z]
   (let [is-child? (fn [loc] (some #{(and loc (zip/node loc))} 
                                  (zip/children z)))]
-    (->> z
-       zip/down
-       (iterate zip/right)
-       (take-while is-child?))))
+    (->> z zip/down (iterate zip/right) (take-while is-child?))))
 
 (defn data-driven "Generate a set of n data-driven tests from a
                    template test, a function f that takes p arguments,
@@ -71,8 +68,8 @@
     (merge (or (meta data) {})
            (or (meta item) {})
            (assoc test
-             :steps (with-meta (fn []
-                                 (apply f (if (fn? item) (item) item)))
+             :steps (with-meta
+                      (fn [] (apply f (if (fn? item) (item) item)))
                       (meta f))
              :parameters item))))
 
@@ -103,11 +100,11 @@
 (defn combine "combines two thunks into one, using juxt"
   [f g]
   (let [[sf sg] (for [i [f g]] (-> (meta i) ::source))]
-    (with-meta (juxt f g) (merge (meta f) (meta g)
-                                 (if (and sf sg)
-                                   {::source (concat sf (drop 2 sg))}
-                                   {})))))
-
+    (with-meta (juxt f g)
+      (merge (meta f) (meta g)
+             (if (and sf sg)
+               {::source (concat sf (drop 2 sg))}
+               {})))))
 
 (defn before-test "Run f before the steps of test node n" [f n]
   (let [s (:steps n)]
