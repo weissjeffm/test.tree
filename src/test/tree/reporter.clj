@@ -56,7 +56,8 @@
         passes (passed-tests)
         [numfail numskip numpass] (map count [fails skips passes])
         total (+ numfail numskip numpass)
-        info (fn [t] {:name (or (pr-str (:parameters t)) (:name t))
+        info (fn [t] {:name (let [p (:parameters t)]
+                             (if p (pr-str p) (:name t)))
                      :time (execution-time t)
                      :classname (:name t)})]
     (with-out-str
