@@ -106,6 +106,10 @@
                {::source (concat sf (drop 2 sg))}
                {})))))
 
+(defn juxtcat [& fs]
+  (fn [& args]
+    (apply concat (apply (apply juxt fs) args))))
+
 (defn before-test "Run f before the steps of test node n" [f n]
   (let [s (:steps n)]
     (assoc n :steps (combine f s))))
