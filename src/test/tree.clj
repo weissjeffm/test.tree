@@ -74,10 +74,10 @@
              until it is consumed."
   [z]
   (future
-    (let [blockers (try ((or (-> z zip/node :blockers)
-                             (constantly []))  ;;default blocker fn returns empty list
-                         z)
-                       (catch Exception e [e]))]  
+    (let [blockers (try (doall ((or (-> z zip/node :blockers)
+                                    (constantly [])) ;;default blocker fn returns empty list
+                                z))
+                        (catch Exception e [e]))]  
       (.offer @q (fn [] (run-test z blockers)))
       (dosync
        (alter reports assoc-in [(-> z zip/node plain-node) :status] :queued)))))
