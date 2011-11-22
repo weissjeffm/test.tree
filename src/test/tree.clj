@@ -47,7 +47,7 @@
                                          :start-time timestamp
                                          :end-time timestamp}
                                         (if blocked?
-                                          {:blocked-by all-blockers} {})))))]
+                                          {:blocked-by blockers} {})))))]
            (dosync
             (alter reports update-in [this-test]
                    merge {:status :done
