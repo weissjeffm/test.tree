@@ -65,13 +65,13 @@
                    the tests"
   [test f data]
   (for [item data]
-    (merge (or (meta data) {})
-           (or (meta item) {})
-           (assoc test
-             :steps (with-meta
-                      (fn [] (apply f (if (fn? item) (item) item)))
-                      (meta f))
-             :parameters item))))
+    (merge test
+           (meta data)
+           (meta item)
+           {:steps (with-meta
+                     (fn [] (apply f (if (fn? item) (item) item)))
+                     (meta f))
+            :parameters item})))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]
