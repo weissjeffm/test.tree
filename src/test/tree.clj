@@ -135,9 +135,10 @@
                     pprint/*print-suppress-namespaces* true
                     pprint/*print-miser-width* 80]
             (pprint/pprint (sort-by (fn [item] (-> item :report :start-time))
-                                    (map #(assoc %1 :report %2)
+                                    (map merge
                                          (keys @reports)
-                                         (vals @reports)))))))
+                                         (for [v (vals @reports)]
+                                           (dissoc v :promise :status))))))))
   @reports)
 
 
