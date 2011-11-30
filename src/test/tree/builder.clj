@@ -1,24 +1,7 @@
 (ns test.tree.builder
   (:require [clojure.zip :as zip])
+  (:use serializable.fn [:only fn])
   (:refer-clojure :exclude [fn]))
-
-;;;
-;;; Serializable fn for printing out what test steps actually do,
-;;; based on technomancy's serializable.fn
-;;;
-
-(defn print-meta [val]
-  {:type ::serializable-fn 
-   ::source val})
-
-(defmacro ^{:doc (str (:doc (meta #'clojure.core/fn))
-                  "\n\n  Oh, but it also allows serialization!!!111eleven")}
-  fn [& sigs]
-  `(with-meta (clojure.core/fn ~@sigs)
-     (print-meta (quote ~&form))))
-
-(defmethod print-method ::serializable-fn [o ^java.io.Writer w]
-  (print-method (::source (meta o)) w))
 
 ;;;
 ;;; pre-execution test manipulation functions
