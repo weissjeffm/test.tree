@@ -20,6 +20,8 @@
 (defmethod print-method ::serializable-fn [o ^java.io.Writer w]
   (print-method (::source (meta o)) w))
 
+(defmethod print-method Throwable [o ^java.io.Writer w]
+  (print-method (list (class o) (.getMessage o)) w))
 ;;;
 ;;; pre-execution test manipulation functions
 ;;;
