@@ -1,6 +1,6 @@
 (ns test.tree.builder
   (:require [clojure.zip :as zip])
-  (:use serializable.fn [:only fn])
+  (:use [serializable.fn :only [fn]])
   (:refer-clojure :exclude [fn]))
 
 ;;;
