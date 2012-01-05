@@ -47,6 +47,14 @@
 (defn total-time []
   (reduce + (map execution-time (keys @reports))))
 
+
+(defn blocker-report []
+  (->> reports
+     vals
+     (mapcat #(get-in % [:report :blocked-by]))
+     (filter #(not (nil? %)))
+     frequencies))
+
 (defn junit-report "Produce an xml report consistent with the
                     junit report schema.  Tries to be especially
                     compatible with Jenkins and ReportNG."
