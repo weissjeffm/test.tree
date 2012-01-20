@@ -3,7 +3,7 @@
             [clojure.pprint :as pprint])
   (:use [clojure.core.incubator :only [-?>]]
         [test.tree.builder :only [plain-node child-locs test-zip nodes]]
-        [test.tree.reporter :only [passed? reports junit-report]])
+        [test.tree.reporter :only [passed? reports junit-report testng-report]])
   
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
@@ -129,6 +129,7 @@
   [tree]
   @(run-allp tree)
   (spit "junitreport.xml" (junit-report))
+  (spit "testng-report.xml" (testng-report))
   (spit "report.clj"
         (with-out-str
           (binding [pprint/*print-right-margin* 120
