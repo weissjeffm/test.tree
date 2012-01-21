@@ -121,10 +121,10 @@
       (queue z)
       end-wait)))
 
-(defmacro redir [[v stream] body]
+(defmacro redir [[v stream] & body]
   `(binding [~v ~stream]
      (try ~@body
-          (finally (.close ~stream)))))
+          (finally (.close ~v)))))
 
 (defn run-suite "Run the test tree (blocking until all tests are
                  complete) and return the reports list.  Also writes a
