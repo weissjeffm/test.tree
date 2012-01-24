@@ -63,7 +63,7 @@
                queue and executes them one at a time."
   []
   (while (and @q (not (and @done (.isEmpty @q))))
-    (if-let [next-item (.poll @q (long 500) TimeUnit/MILLISECONDS)]
+    (if-let [next-item (.poll @q (long 100) TimeUnit/MILLISECONDS)]
       (next-item)))
   (if-not @q (println "queue reset, thread exiting.")
           (println "thread done.")))
