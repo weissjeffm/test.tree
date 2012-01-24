@@ -2,11 +2,12 @@
   (:require [clojure.zip :as zip]
             [clojure.pprint :as pprint])
   (:use [clojure.core.incubator :only [-?>]]
-        [test.tree.builder :only [plain-node child-locs test-zip nodes]]
+        [test.tree.builder :only [plain-node child-locs test-zip nodes realize]]
         [test.tree.reporter :only [passed? reports junit-report testng-report]])
   
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
+
 
 (def q (atom nil))
 (def done (atom nil))
@@ -15,12 +16,46 @@
                normally, :skip if a dependency failed, or an exception
                the test threw."
   [test]
-  (let [start-time  (System/currentTimeMillis)]
-    (merge (try {:returned ((:steps test)) ;test fn is called here
-                 :result :pass}
-                (catch Throwable t {:result t}))
-           {:start-time start-time
-            :end-time (System/currentTimeMillis)})))
+  (try {:returned ((:steps test))       ;test fn is called here
+        :result :pass}
+       (catch Throwable t {:result t})))
+
+
+(defn wrap-data-driven [runner]
+  (fn [{:keys [steps parameters] :as test}]
+    (if parameters
+      (let [realized-params (realize parameters)]
+        (-> test 
+           (assoc :steps (with-meta (fn [] (apply steps realized-params))
+                           (meta steps)))
+           runner
+           (assoc :parameters realized-params)))
+      (runner test))))
+
+(defn wrap-blockers [runner]
+  (fn [{:keys [blocked-by always-run] :as test}]
+    (let [blocked? (-> blocked-by (or []) count (> 0))]
+      (if (and blocked? (not always-run))
+        {:result :skip
+         :blocked-by blocked-by}
+        (runner test)))))
+
+(defn wrap-timer [runner]
+  (fn [test]
+    (let [start-time (System/currentTimeMillis)]
+      (-> test
+         runner
+         (assoc :start-time start-time :end-time (System/currentTimeMillis))))))
+
+(defn wrap-thread-logging [runner]
+  (fn [test]
+    (-> test runner (assoc :thread (.getName (Thread/currentThread))))))
+
+(def ^:dynamic runner
+  (-> execute
+     wrap-timer
+     wrap-blockers
+     wrap-data-driven))
 
 (defn parent-blocker "Returns a list of parent nodes blocking this
                       test (since each node only has one parent, it
@@ -36,18 +71,8 @@
 
 (defn run-test [z blockers]
   (let [this-test (-> z zip/node plain-node)]
-    (try (let [all-blockers (concat blockers (parent-blocker z))
-               blocked? (-> all-blockers count (> 0))
-               report (merge {:thread (.getName (Thread/currentThread))}
-                             (if (or (:always-run this-test)
-                                     (not blocked?))
-                               (execute (plain-node this-test))
-                               (let [timestamp (System/currentTimeMillis)]
-                                 (merge {:result :skip
-                                         :start-time timestamp
-                                         :end-time timestamp}
-                                        (if blocked?
-                                          {:blocked-by blockers} {})))))]
+    (try (let [all-blockers (concat blockers (parent-blocker z)) 
+               report (runner (assoc this-test :blocked-by all-blockers))]
            (dosync
             (alter reports update-in [this-test]
                    merge {:status :done

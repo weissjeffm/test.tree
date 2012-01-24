@@ -16,7 +16,13 @@
                                {:name "create a frob"
                                 :steps (fn [] (Thread/sleep 4000) (println "frob created"))
                                 :more [{:name "rename a frob"
-                                        :steps (fn [] (Thread/sleep 4000) (println "frob renamed"))}
+                                        :steps (fn [] (Thread/sleep 4000) (println "frob renamed"))
+                                        :more (builder/data-driven {:name "indivis by 5"
+                                                                    :steps
+                                                                    (fn [n] (-> n
+                                                                              (mod 5)
+                                                                              (= 0)
+                                                                              (when (throw (Exception. "Divisible by 5! Oh noes!")))))} [[1] [20]  (with-meta (fn [] [7]) {:blockers (fn [_] [:blocker1])})])}
                                        {:name "delete a frob"
                                         :steps (fn [] (Thread/sleep 4000)
                                                  (throw (Exception. "woops, frob could not be deleted."))
