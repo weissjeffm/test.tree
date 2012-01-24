@@ -121,6 +121,11 @@
       (queue z)
       end-wait)))
 
+(defmacro redir [[v stream] & body]
+  `(binding [~v ~stream]
+     (try ~@body
+          (finally (.close ~v)))))
+
 (defn run-suite "Run the test tree (blocking until all tests are
                  complete) and return the reports list.  Also writes a
                  junit report file to the current directory, and a
@@ -128,8 +133,10 @@
                  to just run the tests without blocking, use run-allp."
   [tree]
   @(run-allp tree)
-  (spit "junitreport.xml" (junit-report))
-  (spit "testng-report.xml" (testng-report))
+  (redir [*out* (java.io.FileWriter. "junitreport.xml")]
+    (junit-report))
+  (redir [*out* (java.io.FileWriter. "testng-report.xml")]
+    (testng-report))
   (spit "report.clj"
         (with-out-str
           (binding [pprint/*print-right-margin* 120
