@@ -53,8 +53,8 @@
 
 (def ^:dynamic runner
   (-> execute
-     wrap-timer
      wrap-blockers
+     wrap-timer
      wrap-data-driven))
 
 (defn parent-blocker "Returns a list of parent nodes blocking this

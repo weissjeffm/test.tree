@@ -100,6 +100,8 @@
                           (for [pass passes]
                             [:testcase (info pass)]))]))))
 
+(def testng-dateformat (java.text.SimpleDateFormat. "yyyy-MM-dd'T'HH:mm:ss'Z'"))
+
 (defn testng-report "Produce an xml report consistent with the
                     testng report schema.  Tries to be especially
                     compatible with Jenkins."
@@ -112,14 +114,18 @@
         grouped-by-class (group-by :name (keys @reports))
         to-ms-str #(-> (* % 1000) Math/round str)
         suite-duration-ms (to-ms-str (total-time))
-        info (fn [t] {:name (:name t)
-                     :is-config (-> t :configuration boolean str)
-                     :duration-ms (to-ms-str (execution-time t))
-                     :status (cond (skipped? t) "SKIP"
-                                   (passed? t) "PASS"
-                                   (failed? t) "FAIL")
-                     :signature (try (format "%s%s" (:name t) (-> t :steps second))
-                                     (catch Exception e "sig"))})]
+        date-format (fn [unixdate] (.format testng-dateformat (java.util.Date. unixdate)))
+        info (fn [t tr] {:name (:name t)
+                        :is-config (-> t :configuration boolean str)
+                        :duration-ms (to-ms-str (execution-time t))
+                        :status (cond (skipped? t) "SKIP"
+                                      (passed? t) "PASS"
+                                      (failed? t) "FAIL")
+                        :signature (try (format "%s%s" (:name t) (-> t :steps second))
+                                        (catch Exception e "sig"))
+                        :started-at (date-format (:start-time tr))
+                        :finished-at (date-format (:end-time tr))
+                        :description (or (:description t) "")})]
    
     (binding [xml/*prxml-indent* 2]
       (xml/prxml [:decl! {:version "1.0"} ]
@@ -131,22 +137,24 @@
                   [:suite {:name "Test Suite"
                            :duration-ms suite-duration-ms}
                    [:test {:name "Test Tree"
-                           :duration-ms suite-duration-ms}
-                    (for [[class methods] grouped-by-class]
-                      [:class {:name class}
+                           :duration-ms suite-duration-ms
+                           :started-at (date-format (System/currentTimeMillis))
+                           :finished-at (date-format (System/currentTimeMillis))}  ;;need real values here
+                    (for [[clazz methods] grouped-by-class]
+                      [:class {:name clazz}
                        (for [method methods]
-                         (let [tr (@reports method)]
-                           [:test-method (info method)
+                         (let [tr (:report (@reports method))]
+                           [:test-method (info method tr)
                             (when (skipped? method)
                               [:exception {:class "Skipped"}
                                [:message [:cdata! (format "Blocked by: %s"
-                                                          (pr-str (get-in tr [:report :blocked-by])))]]])
+                                                          (pr-str (:blocked-by tr)))]]])
                             (when (failed? method)
                               (let [e (result method)]
                                 [:exception {:class (-> e .getClass str)}
                                  [:message [:cdata! (.getMessage e)]]
                                  [:full-stacktrace [:cdata! (pst-str e)]]]))
-                            (if-let [params (:parameters method)] 
+                            (if-let [params (:parameters tr)] 
                               [:params (map (fn [i p] [:param {:index i}
-                                                       [:value [:cdata! (pr-str p)]]])
+                                                      [:value [:cdata! (pr-str p)]]])
                                             (iterate inc 0) params)])]))])]]]))))
