@@ -74,30 +74,31 @@
                              (if p (pr-str p) (:name t)))
                      :time (execution-time t)
                      :classname (:name t)})]
-    (xml/prxml [:decl! {:version "1.0"} ]
-               [:testsuite {:tests (str total)
-                            :failures (str numfail)
-                            :errors "0"
-                            :skipped (str numskip)
-                            :time (str (total-time))}
-                (concat (for [fail fails]
-                          [:testcase (info fail)
-                           [:failure {:type (->  fail result class .getCanonicalName )
-                                      :time (execution-time fail)
-                                      :message (format "On thread %s: %s"
-                                                       (thread fail)
-                                                       (-> fail result .getMessage))}
-                            [:cdata! (-> fail result pst-str)]]])
-                        (for [skip skips]
-                          (let [reason (blocked-by skip)]
-                            [:testcase (info skip)
-                             [:skipped (if reason
-                                         {:message (format "On thread %s: %s"
-                                                           (thread skip)
-                                                           (str reason))}
-                                         {})]]))
-                        (for [pass passes]
-                          [:testcase (info pass)]))])))
+    (binding [xml/*prxml-indent* 2]
+      (xml/prxml [:decl! {:version "1.0"} ]
+                 [:testsuite {:tests (str total)
+                              :failures (str numfail)
+                              :errors "0"
+                              :skipped (str numskip)
+                              :time (str (total-time))}
+                  (concat (for [fail fails]
+                            [:testcase (info fail)
+                             [:failure {:type (->  fail result class .getCanonicalName )
+                                        :time (execution-time fail)
+                                        :message (format "On thread %s: %s"
+                                                         (thread fail)
+                                                         (-> fail result .getMessage))}
+                              [:cdata! (-> fail result pst-str)]]])
+                          (for [skip skips]
+                            (let [reason (blocked-by skip)]
+                              [:testcase (info skip)
+                               [:skipped (if reason
+                                           {:message (format "On thread %s: %s"
+                                                             (thread skip)
+                                                             (str reason))}
+                                           {})]]))
+                          (for [pass passes]
+                            [:testcase (info pass)]))]))))
 
 (defn testng-report "Produce an xml report consistent with the
                     testng report schema.  Tries to be especially
@@ -120,31 +121,32 @@
                      :signature (try (format "%s%s" (:name t) (-> t :steps second))
                                      (catch Exception e "sig"))})]
    
-    (xml/prxml [:decl! {:version "1.0"} ]
-               [:testng-results {:total (str total)
-                                 :failed (str numfail)
-                                 :passed (str numpass)
-                                 :skipped (str numskip)}
-                [:reporter-output] ;;empty
-                [:suite {:name "Test Suite"
-                         :duration-ms suite-duration-ms}
-                 [:test {:name "Test Tree"
-                         :duration-ms suite-duration-ms}
-                  (for [[class methods] grouped-by-class]
-                    [:class {:name class}
-                     (for [method methods]
-                       (let [tr (@reports method)]
-                         [:test-method (info method)
-                          (when (skipped? method)
-                            [:exception {:class "Skipped"}
-                             [:message [:cdata! (format "Blocked by: %s"
-                                                        (pr-str (get-in tr [:report :blocked-by])))]]])
-                          (when (failed? method)
-                            (let [e (result method)]
-                              [:exception {:class (-> e .getClass str)}
-                               [:message [:cdata! (.getMessage e)]]
-                               [:full-stacktrace [:cdata! (pst-str e)]]]))
-                          (if-let [params (:parameters method)] 
-                            [:params (map (fn [i p] [:param {:index i}
-                                                    [:value [:cdata! (pr-str p)]]])
-                                          (iterate inc 0) params)])]))])]]])))
+    (binding [xml/*prxml-indent* 2]
+      (xml/prxml [:decl! {:version "1.0"} ]
+                 [:testng-results {:total (str total)
+                                   :failed (str numfail)
+                                   :passed (str numpass)
+                                   :skipped (str numskip)}
+                  [:reporter-output] ;;empty
+                  [:suite {:name "Test Suite"
+                           :duration-ms suite-duration-ms}
+                   [:test {:name "Test Tree"
+                           :duration-ms suite-duration-ms}
+                    (for [[class methods] grouped-by-class]
+                      [:class {:name class}
+                       (for [method methods]
+                         (let [tr (@reports method)]
+                           [:test-method (info method)
+                            (when (skipped? method)
+                              [:exception {:class "Skipped"}
+                               [:message [:cdata! (format "Blocked by: %s"
+                                                          (pr-str (get-in tr [:report :blocked-by])))]]])
+                            (when (failed? method)
+                              (let [e (result method)]
+                                [:exception {:class (-> e .getClass str)}
+                                 [:message [:cdata! (.getMessage e)]]
+                                 [:full-stacktrace [:cdata! (pst-str e)]]]))
+                            (if-let [params (:parameters method)] 
+                              [:params (map (fn [i p] [:param {:index i}
+                                                       [:value [:cdata! (pr-str p)]]])
+                                            (iterate inc 0) params)])]))])]]]))))
