@@ -55,6 +55,7 @@
   (-> execute
      wrap-blockers
      wrap-timer
+     wrap-thread-logging
      wrap-data-driven))
 
 (defn parent-blocker "Returns a list of parent nodes blocking this
