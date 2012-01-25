@@ -148,7 +148,8 @@
                             (when (skipped? method)
                               [:exception {:class "Skipped"}
                                [:message [:cdata! (format "Blocked by: %s"
-                                                          (pr-str (:blocked-by tr)))]]])
+                                                          (pr-str (:blocked-by tr)))]]
+                               [:full-stacktrace [:cdata! "Skips are not errors, no stacktrace."]]])
                             (when (failed? method)
                               (let [e (result method)
                                     msg (.getMessage e)
