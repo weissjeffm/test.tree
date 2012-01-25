@@ -150,10 +150,15 @@
                                [:message [:cdata! (format "Blocked by: %s"
                                                           (pr-str (:blocked-by tr)))]]])
                             (when (failed? method)
-                              (let [e (result method)]
+                              (let [e (result method)
+                                    msg (.getMessage e)
+                                    pretty-st (pst-str e)
+                                    not-empty (fn [s] (and s (-> s .length (> 0))))]
                                 [:exception {:class (-> e .getClass str)}
-                                 [:message [:cdata! (.getMessage e)]]
-                                 [:full-stacktrace [:cdata! (pst-str e)]]]))
+                                 (when (not-empty msg)
+                                   [:message [:cdata! msg]])
+                                 (when (not-empty pretty-st)
+                                   [:full-stacktrace [:cdata! pretty-st]])]))
                             (if-let [params (:parameters tr)] 
                               [:params (map (fn [i p] [:param {:index i}
                                                       [:value [:cdata! (pr-str p)]]])
