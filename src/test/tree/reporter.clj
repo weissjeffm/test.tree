@@ -61,6 +61,11 @@
      (filter #(not (nil? %)))
      frequencies))
 
+(defn- format-exception-msg [t]
+  (format "On thread %s: %s"
+          (thread t)
+          (-> t result .getMessage))) 
+
 (defn junit-report "Produce an xml report consistent with the
                     junit report schema.  Tries to be especially
                     compatible with Jenkins and ReportNG."
@@ -85,9 +90,7 @@
                             [:testcase (info fail)
                              [:failure {:type (->  fail result class .getCanonicalName )
                                         :time (execution-time fail)
-                                        :message (format "On thread %s: %s"
-                                                         (thread fail)
-                                                         (-> fail result .getMessage))}
+                                        :message (format-exception-msg fail)}
                               [:cdata! (-> fail result pst-str)]]])
                           (for [skip skips]
                             (let [reason (blocked-by skip)]
@@ -152,7 +155,7 @@
                                [:full-stacktrace [:cdata! "Skips are not errors, no stacktrace."]]])
                             (when (failed? method)
                               (let [e (result method)
-                                    msg (.getMessage e)
+                                    msg (format-exception-msg method)
                                     pretty-st (pst-str e)
                                     not-empty (fn [s] (and s (-> s .length (> 0))))]
                                 (when (every? not-empty [msg pretty-st])
