@@ -139,7 +139,7 @@
                    [:test {:name "Test Tree"
                            :duration-ms suite-duration-ms
                            :started-at (date-format (System/currentTimeMillis))
-                           :finished-at (date-format (System/currentTimeMillis))}  ;;need real values here
+                           :finished-at (date-format (System/currentTimeMillis))} ;;need real values here
                     (for [[clazz methods] grouped-by-class]
                       [:class {:name clazz}
                        (for [method methods]
@@ -154,11 +154,10 @@
                                     msg (.getMessage e)
                                     pretty-st (pst-str e)
                                     not-empty (fn [s] (and s (-> s .length (> 0))))]
-                                [:exception {:class (-> e .getClass str)}
-                                 (when (not-empty msg)
-                                   [:message [:cdata! msg]])
-                                 (when (not-empty pretty-st)
-                                   [:full-stacktrace [:cdata! pretty-st]])]))
+                                (when (every? not-empty [msg pretty-st])
+                                  [:exception {:class (-> e .getClass str)}
+                                   [:message [:cdata! msg]]
+                                   [:full-stacktrace [:cdata! pretty-st]]])))
                             (if-let [params (:parameters tr)] 
                               [:params (map (fn [i p] [:param {:index i}
                                                       [:value [:cdata! (pr-str p)]]])

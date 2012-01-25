@@ -13,8 +13,7 @@
 (def done (atom nil))
 
 (defn execute "Executes test, returns either :pass if the test exits
-               normally, :skip if a dependency failed, or an exception
-               the test threw."
+               normally, or exception the test threw."
   [test]
   (try {:returned ((:steps test))       ;test fn is called here
         :result :pass}
