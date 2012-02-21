@@ -1,7 +1,8 @@
 (ns test.tree
   (:require [clojure.zip :as zip]
             [clojure.pprint :as pprint])
-  (:use [clojure.core.incubator :only [-?>]]
+  (:use slingshot.slingshot
+        [clojure.core.incubator :only [-?>]] 
         [test.tree.builder :only [plain-node child-locs test-zip nodes realize]]
         [test.tree.reporter :only [passed? reports junit-report testng-report]])
   
@@ -15,9 +16,10 @@
 (defn execute "Executes test, returns either :pass if the test exits
                normally, or exception the test threw."
   [test]
-  (try {:returned ((:steps test))       ;test fn is called here
-        :result :pass}
-       (catch Throwable t {:result t})))
+  (try+ {:returned ((:steps test))      ;test fn is called here
+         :result :pass}
+        (catch Object _ {:result :fail
+                         :error &throw-context})))
 
 
 (defn wrap-data-driven [runner]

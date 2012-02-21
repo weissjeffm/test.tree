@@ -1,8 +1,13 @@
 (ns test.tree.reporter
   (:require [clojure.prxml :as xml])
-  (:use [clj-stacktrace.repl :only [pst-str]]))
+  (:use clojure.pprint
+        [clj-stacktrace.repl :only [pst-str]]))
 
 (def reports (ref {}))
+
+(defmulti exception :wrapper)
+(defmethod exception nil [e] (:object e))
+(defmethod exception :default [e] (:wrapper e))
 
 (defn report [test]
   (let [v (@reports test)]
@@ -14,6 +19,9 @@
 
 (defn result [test]
   (-> test report :result))
+
+(defn error [test]
+  (-> test report :error))
 
 (defn thread [test]
   (-> test report :thread))
@@ -37,7 +45,7 @@
                             (= (result t) :pass))) (keys @reports)))
 
 (defn failed? [t]
-  (isa? (class (result t)) Throwable))
+  (= (result t) :fail))
 
 (defn failed-tests []
   (filter failed? (keys @reports)))
@@ -64,7 +72,7 @@
 (defn- format-exception-msg [t]
   (format "On thread %s: %s"
           (thread t)
-          (-> t result .getMessage))) 
+          (-> t error :message))) 
 
 (defn junit-report "Produce an xml report consistent with the
                     junit report schema.  Tries to be especially
@@ -88,10 +96,13 @@
                               :time (str (total-time))}
                   (concat (for [fail fails]
                             [:testcase (info fail)
-                             [:failure {:type (->  fail result class .getCanonicalName )
-                                        :time (execution-time fail)
-                                        :message (format-exception-msg fail)}
-                              [:cdata! (-> fail result pst-str)]]])
+                             (let [err (error fail)
+                                   obj (:object err)]
+                               [:failure {:type (or (:type obj)
+                                                    (-> obj .getClass .getName))
+                                          :time (execution-time fail)
+                                          :message (format-exception-msg fail)}
+                                [:cdata! (-> fail error exception pst-str)]])])
                           (for [skip skips]
                             (let [reason (blocked-by skip)]
                               [:testcase (info skip)
@@ -152,16 +163,19 @@
                               [:exception {:class "Skipped"}
                                [:message [:cdata! (format "Blocked by: %s"
                                                           (pr-str (:blocked-by tr)))]]
-                               [:full-stacktrace [:cdata! "Skips are not errors, no stacktrace."]]])
+                               [:short-stacktrace [:cdata! "Skips are not errors, no stacktrace."]]])
                             (when (failed? method)
-                              (let [e (result method)
+                              (let [err (-> method error (dissoc :stack-trace)) 
+                                    e (exception err)
                                     msg (format-exception-msg method)
                                     pretty-st (pst-str e)
                                     not-empty (fn [s] (and s (-> s .length (> 0))))]
                                 (when (every? not-empty [msg pretty-st])
                                   [:exception {:class (-> e .getClass str)}
                                    [:message [:cdata! msg]]
-                                   [:full-stacktrace [:cdata! pretty-st]]])))
+                                   [:short-stacktrace [:cdata! pretty-st]]
+                                   [:full-stacktrace [:cdata! (with-out-str
+                                                                (pprint err))]]])))
                             (if-let [params (:parameters tr)] 
                               [:params (map (fn [i p] [:param {:index i}
                                                       [:value [:cdata! (pr-str p)]]])
