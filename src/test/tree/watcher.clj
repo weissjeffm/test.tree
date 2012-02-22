@@ -13,7 +13,7 @@
           (f k v))))))
 
 (defn on-fail "create a watcher that will call f when a test fails." [f]
-  (watch-on-pred (fn [t r] (and (isa? (-> r :report :result class) Throwable)
+  (watch-on-pred (fn [t r] (and (-> r :report :result (= :fail))
                                (not (configuration? t))))
                  f))
 
