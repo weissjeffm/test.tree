@@ -192,9 +192,10 @@
                                   [:exception {:class (-> e .getClass str)}
                                    [:message [:cdata! msg]]
                                    [:short-stacktrace [:cdata! pretty-st]]
-                                   (concat [:full-stacktrace] (syntax-highlight
-                                                               (with-out-str
-                                                                 (pprint err))))])))
+                                   (vec
+                                    (concat [:full-stacktrace] (syntax-highlight
+                                                                (with-out-str
+                                                                  (pprint err)))))])))
                             (if-let [params (:parameters tr)] 
                               [:params (map (fn [i p] [:param {:index i}
                                                       [:value [:cdata! (pr-str p)]]])
