@@ -116,6 +116,24 @@
 
 (def testng-dateformat (java.text.SimpleDateFormat. "yyyy-MM-dd'T'HH:mm:ss'Z'"))
 
+(defn syntax-highlighter [sh-url]
+  (fn [s]
+    (let [url #(str sh-url %)]
+      [[:script {:type "text/javascript" :src (url "scripts/shCore.js")} " "]
+       [:script {:type "text/javascript" :src (url "scripts/shBrushClojure.js")} " "]
+       [:link {:href (url "styles/shCore.css")}]
+       [:link {:href (url "styles/shCoreEmacs.css")}]
+       [:script {:type "text/javascript"} "SyntaxHighlighter.all()"]
+       [:pre {:class "brush: clj;gutter: false; toolbar: false"} s]])))
+
+(defn plain-text [s]
+  [[:cdata! s]])
+
+;;a rebindable function to do syntax highlighting on some code/data in
+;;a report.  Should take text and return the syntaxhighlighted html
+(def ^:dynamic syntax-highlight plain-text)
+
+
 (defn testng-report "Produce an xml report consistent with the
                     testng report schema.  Tries to be especially
                     compatible with Jenkins."
@@ -174,8 +192,9 @@
                                   [:exception {:class (-> e .getClass str)}
                                    [:message [:cdata! msg]]
                                    [:short-stacktrace [:cdata! pretty-st]]
-                                   [:full-stacktrace [:cdata! (with-out-str
-                                                                (pprint err))]]])))
+                                   (concat [:full-stacktrace] (syntax-highlight
+                                                               (with-out-str
+                                                                 (pprint err))))])))
                             (if-let [params (:parameters tr)] 
                               [:params (map (fn [i p] [:param {:index i}
                                                       [:value [:cdata! (pr-str p)]]])
