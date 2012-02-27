@@ -119,15 +119,20 @@
 (defn syntax-highlighter [sh-url]
   (fn [s]
     (let [url #(str sh-url %)]
-      [[:script {:type "text/javascript" :src (url "scripts/shCore.js")} " "]
-       [:script {:type "text/javascript" :src (url "scripts/shBrushClojure.js")} " "]
-       [:link {:href (url "styles/shCore.css")}]
-       [:link {:href (url "styles/shCoreEmacs.css")}]
-       [:script {:type "text/javascript"} "SyntaxHighlighter.all()"]
-       [:pre {:class "brush: clj;gutter: false; toolbar: false"} s]])))
+      (format "<script type=\"text/javascript\" src=\"%s\"></script>
+               <script type=\"text/javascript\" src=\"%s\"></script>
+               <link href=\"%s\" rel=\"stylesheet\"/>
+               <link href=\"%s\" rel=\"stylesheet\"/>
+               <script type=\"text/javascript\">SyntaxHighlighter.all()</script>
+               <pre class=\"brush: clj;gutter: false; toolbar: false\">%s</pre> "
+              (url "scripts/shCore.js")
+              (url "scripts/shBrushClojure.js")
+              (url "styles/shCore.css")
+              (url "styles/shCoreEmacs.css")
+              s))))
 
-(defn plain-text [s]
-  [[:cdata! s]])
+
+(def plain-text identity )
 
 ;;a rebindable function to do syntax highlighting on some code/data in
 ;;a report.  Should take text and return the syntaxhighlighted html
@@ -190,12 +195,9 @@
                                     not-empty (fn [s] (and s (-> s .length (> 0))))]
                                 (when (every? not-empty [msg pretty-st])
                                   [:exception {:class (-> e .getClass str)}
-                                   [:message [:cdata! msg]]
-                                   [:short-stacktrace [:cdata! pretty-st]]
-                                   (vec
-                                    (concat [:full-stacktrace] (syntax-highlight
-                                                                (with-out-str
-                                                                  (pprint err)))))])))
+                                   [:message [:cdata!
+                                              (->> err pprint with-out-str syntax-highlight)]]
+                                   [:short-stacktrace [:cdata! pretty-st]]])))
                             (if-let [params (:parameters tr)] 
                               [:params (map (fn [i p] [:param {:index i}
                                                       [:value [:cdata! (pr-str p)]]])
