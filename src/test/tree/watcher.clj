@@ -23,3 +23,10 @@
       (doseq [[k v] b]
         (when (= (:status v) stat)
           (f k v))))))
+
+(defn stdout-log-watcher [k r o n]
+  (let [[_ d _] (data/diff o n)]
+    (doseq [[{:keys [name parameters]} {:keys [status report]}] d]
+      (let [parms-str (if parameters (pr-str parameters) "")]
+        (if (= status :done)
+          (println (apply format "%-12s %s %s\n" (map str [(:result report) name parms-str]))))))))
