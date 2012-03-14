@@ -7,6 +7,19 @@
 ;;; pre-execution test manipulation functions
 ;;;
 
+(defprotocol Delay
+  (realize [d]))
+
+(extend-protocol Delay
+  clojure.lang.Fn
+  (realize [t] (.call t))
+
+  clojure.lang.Delay
+  (realize [t] (clojure.core/force t))
+
+  java.lang.Object
+  (realize [t] t))
+
 (defn test-zip "Create a clojure.zip structure so the tree can be
                 easily walked."
   [tree]
@@ -46,15 +59,11 @@
                    the tests. The metadata on either the overall set,
                    or rows of data, will be extracted and merged with
                    the tests"
-  [test f data]
+  [test data]
   (for [item data]
-    (merge test
-           (meta data)
-           (meta item)
-           {:steps (with-meta
-                     (fn [] (apply f (if (fn? item) (item) item)))
-                     (meta f))
-            :parameters item})))
+    (->  test
+        (merge (meta data) (meta item))
+        (assoc :parameters item))))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]

@@ -33,9 +33,9 @@
      tested if that fails.  A test that sends a simple email could be
      a child, a test that sends an email with an attachment could be a
      grandchild node.
-   + Each node is a map - it contains the test's name, a no-arg
-     function that when called, runs the actual test, a list of child
-     tests, and some optional properties.
+   + Each node is a map - it contains the test's name, a function that
+     when called, runs the actual test, a list of child tests, and
+     some optional properties.
    + Each test needs to be *atomic*.  The only guarantee test.tree
      makes about a test is that its parent will have passed before it
      is executed.  If the parent fails, the child and all its
@@ -53,6 +53,12 @@
      same email!  'Delete' may run first.  If a collision is possible,
      each test should either create or check for its own resources as
      part of its procedure.
+*** Data Driven Testing
+    It's very easy to do data driven testing - see the function
+    test.tree.builder/data-driven. If you have a test function that
+    takes arguments, and a list of data to pass to the test function,
+    data-driven creates a list of tests for you. So you can simply
+    have a :more entry that calls data-driven.
 
 ** Example test suite
    #+BEGIN_EXAMPLE
@@ -81,7 +87,7 @@
 *** Test keys
     + *:name* can be any string (actually doesn't even have to be a string,
       but will be printed out later using str).
-    + *:steps* are always no arg function, aka 'thunk'.   
+    + *:steps* is a function that take no arguments.  
     + *:more* is a list of child tests.  
 *** Optional keys
     + *:blockers* - A function that returns a list of items that are
@@ -100,8 +106,8 @@
     + *:always-run* - if set to logical true, run this test even if its
       parent did not pass.  It will still be guaranteed to run after
       its parent.  If it passes, its children will be run.  
-    + *:description* - a detailed description of the test.  Not
-      currently used for anything except to appear in the report.
+    + *:description* - a detailed description of the test.  Used for
+      inclusion in reports such as testNG xml report.
 *** Metadata keys
     These are configuration options for the entire suite.  
     + *:threads* The number of threads that will run tests - no more
