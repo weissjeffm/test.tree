@@ -4,7 +4,7 @@
   (:use slingshot.slingshot
         [clojure.core.incubator :only [-?>]] 
         [test.tree.builder :only [plain-node child-locs test-zip nodes realize]]
-        [test.tree.reporter :only [passed? reports junit-report testng-report]])
+        [test.tree.reporter :only [passed? reports init-reports junit-report testng-report]])
   
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
@@ -125,10 +125,8 @@
     (reset! done false)
 
     ;;initialize reports
-    (dosync
-     (ref-set reports (zipmap (nodes z)
-                              (repeatedly (fn [] {:status :waiting
-                                                 :promise (promise)})))))
+    (init-reports z)
+    
     ;;watch reports
     (doseq [[k v] watchers]
       (add-watch reports k v))

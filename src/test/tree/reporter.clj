@@ -1,18 +1,26 @@
 (ns test.tree.reporter
   (:require [clojure.prxml :as xml])
   (:use clojure.pprint
+        [test.tree.builder :only [nodes]]
         [clj-stacktrace.repl :only [pst-str]]))
 
-(def reports (ref {}))
+(declare reports)
+(defn init-reports [z]
+  (def ^:dynamic reports (ref {}))
+  (dosync
+     (ref-set reports (zipmap (nodes z)
+                              (repeatedly (fn [] {:status :waiting
+                                                 :promise (promise)}))))))
 
 (defmulti exception :wrapper)
 (defmethod exception nil [e] (:object e))
 (defmethod exception :default [e] (:wrapper e))
 
 (defn report [test]
-  (let [v (@reports test)]
-    @(:promise v)
-    (:report v)))
+  ;;need to deref the reports both before and after the promise is
+  ;;delivered, otherwise the report doesn't have the result yet.
+  (deref (:promise (@reports test)))
+  (:report (@reports test)))  
 
 (defn blocked-by [test]
   (-> test report :blocked-by))
