@@ -64,11 +64,12 @@
     expected value.  To do data driven testing, you just create a
     bunch of rows of [input expected-value].  See the example below.
 
-** Example test suite
+** Example test suite program
    #+BEGIN_EXAMPLE
    (require 'calc.test)
+   (require 'test.tree)
 
-   (def gmail-tests  
+   (def my-calc-suite  
     (with-meta
      {:name "enter numbers"
       :steps calc.test/verify-entered-numbers
@@ -84,11 +85,10 @@
                                    [[2 2] 4]
                                    [[1 -1] 0]
                                    [[1 2 3 4] 10]
-                                   [[1.23 4.56] 5.79]]}]}]}
-      
-     {:thread-runner mythreadrunner
-      :threads 3
-      :setup mysetup})
+                                   [[1.23 4.56] 5.79]])}]}))
+
+   (defn -main [ & args] 
+    (test.tree/run-suite my-calc-suite))
    #+END_EXAMPLE
 *** Test keys
     + *:name* is your choice of name, generally a string.
