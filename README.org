@@ -1,10 +1,20 @@
 * test.tree is a functional test harness for Clojure.  
-    It fulfills the same purpose as Java's TestNG or Python's
-    nosetests.  It gathers tests, handles dependencies, allows
-    flexible grouping and ordering of tests and their associated
-    setups.  It is multithreaded, and leverages Clojure's power as much
-    as possible.  Everything is "just plain Clojure" - maps, lists,
-    and functions.
+    It fulfills the same purpose as [[http://testng.org][TestNG]], [[http://readthedocs.org/docs/nose/en/latest/][nosetests]], [[http://code.google.com/p/robotframework/][Robot
+    Framework]], [[http://pytest.org/latest/][pytest]], etc. It gathers tests, handles dependencies,
+    allows flexible grouping and ordering of tests, and creates
+    reports.
+** Philosophy
+   Automated testing is programming. No amount of snake oil like
+   record/playback tools or keyword-driven testing is going to reduce
+   the complexity of programming. In order to have automated tests,
+   *someone* has to understand the complexity of the testcases and
+   Software Under Test. That person must formally specify how each
+   test should be performed. This is why programming languages exist -
+   to formally specify a process. Test.tree's design goal is to be a
+   simple library, not an application. It has a minimalist design that
+   uses nothing but Clojure's basic types - functions, lists, and
+   maps. It provides the pieces, and you put them together however you
+   want.
 ** Sampling of supported scenarios:
     + Run many tests in parallel
     + Generate data-driven tests
@@ -17,114 +27,131 @@
     + Control depth of testing
 
 ** How do I use it?
-   The requirements for a set of test.tree tests is a little bit
-   different than TestNG or nosetests.  Rather than annotating tests
-   with information about when they should run, test.tree traverses an
-   explicitly arranged tree of tests.  This may sound rigid, but
-   Clojure is so good at manipulating these data structures, that it's
-   just as flexible as other tools, if not more so.  The test tree
-   really only has one important contract - that no child test will be
-   run before its parent.  However there are some general guidelines
-   that will make writing tests easier:
+   Test.tree takes a nested data structure as input (in the form of a
+   tree of tests). It executes the tests starting with the root,
+   working its way out to the leaves. It only has one important
+   contract - that no child test will be run before its parent.
+   However, this contract has some important consequences:
    + Each expanding level of the tree should be more and more detailed
-     testing.  Each node will only be run if its parent passes.
-     *See the example below* if you were testing the gmail app, logging in would
-     probably be at the root of the tree, since not much else can be
-     tested if that fails.  A test that sends a simple email could be
-     a child, a test that sends an email with an attachment could be a
-     grandchild node.
-   + Each node is a map - it contains the test's name, a function that
-     when called, runs the actual test, a list of child tests, and
-     some optional properties.
-   + Each test needs to be *atomic*.  The only guarantee test.tree
-     makes about a test is that its parent will have passed before it
-     is executed.  If the parent fails, the child and all its
-     descendants are marked "skipped" and not run.  There is no
-     guarantee that a child will run *immediately* after its parent,
-     or that it will run on the same thread.  That means you should
-     take precautions to avoid collisions and discontinuity in your
-     app.  To go back to the gmail example, if there are 3 sibling
-     tests:
-        1. Forward an email
-        2. Reply to an email
-        3. Delete an email 
-           
-     They should not all try to operate on the
-     same email!  'Delete' may run first.  If a collision is possible,
-     each test should either create or check for its own resources as
-     part of its procedure.
+     testing. Each node will only be run if its parent passes. *See
+     the example below* if you were testing a calculator app, entering
+     numbers would probably be at the root. If that fails, nothing
+     else can be tested. A test that adds 2 numbers could be a child,
+     a test that adds ten numbers could be a grandchild node.
+   + Each node is a map - it contains the test's name, its steps, and
+     a list of child tests.
+   + Each test should be *atomic* in terms of what it does to the [[http://en.wikipedia.org/wiki/System_under_test][SUT]].
+     This is a best practice in *any* automated test suite, but it's
+     required for test.tree. The only guarantee test.tree makes about
+     a test is that its parent will have passed before it is executed.
+     Tests should be written accordingly - they must not assume the
+     [[http://en.wikipedia.org/wiki/System_under_test][SUT]] hasn't been touched since the parent test finished. Tests
+     should do their own setup in the SUT to avoid collisions with other
+     tests that may run at the same time. 
+
 *** Data Driven Testing
-    It's very easy to do data driven testing - see the function
-    test.tree.builder/data-driven. If you have a test function that
-    takes arguments, and a list of data to pass to the test function,
-    data-driven creates a list of tests for you. So you can simply
-    have a :more entry that calls data-driven.
+    It's very easy to do data driven testing. Computer Science
+    invented data driven testing many decades ago, it's called [[http://en.wikipedia.org/wiki/Partial_application][Partial
+    Application]]. When a test is actually run, it is a function that
+    take no arguments. But it's very easy to build no-arg functions
+    that have their args "built in". See
+    *test.tree.builder/data-driven* to build a list of data-driven
+    tests.
+
+    A common idiom is to write a function that takes some input to
+    give to your SUT, and some value you expect to get back from your
+    SUT.  The function enters the input and compares the output to the
+    expected value.  To do data driven testing, you just create a
+    bunch of rows of [input expected-value].  See the example below.
 
 ** Example test suite
    #+BEGIN_EXAMPLE
+   (require 'calc.test)
+
    (def gmail-tests  
     (with-meta
-     {:name "log in"
-      :steps (fn [] (login "user" "password"))
-      :more [{:name "send simple email"
-              :steps (fn [] (send-email :from "blah@blah.com" 
-                                        :to "joe@blow.com"
-                                        :subject "stuff"))
-              :more [{:name "send email with attachment"
-                      :steps (fn [] (send-email :from "blah@blah.com" 
-                                                :to "joe@blow.com"
-                                                :subject "stuff"
-                                                :attachment "/tmp/myfile"))}]}
-             {:name "search for email"
-              :steps search/simple
-              :more [{:name "search with boolean"
-                      :steps (fn [] (search "cat or dog"))}]}]}
+     {:name "enter numbers"
+      :steps calc.test/verify-entered-numbers
+      :more [{:name "clear display"
+              :steps calc.test/verify-clear
+              :more [{:name "enter numbers after clear"
+                      :steps calc.test/verify-entered-numbers}]}
+             {:name "display cleared after pressing operator"
+              :steps calc.test/verify-operator-clears
+              :more (data-driven {:name "add numbers"
+                                  :steps calc.test/add}
+                                  [[[1 1] 2]
+                                   [[2 2] 4]
+                                   [[1 -1] 0]
+                                   [[1 2 3 4] 10]
+                                   [[1.23 4.56] 5.79]]}]}]}
       
      {:thread-runner mythreadrunner
       :threads 3
       :setup mysetup})
    #+END_EXAMPLE
 *** Test keys
-    + *:name* can be any string (actually doesn't even have to be a string,
-      but will be printed out later using str).
-    + *:steps* is a function that take no arguments.  
-    + *:more* is a list of child tests.  
+    + *:name* is your choice of name, generally a string.
+    + *:steps* is a function that take no arguments. Like any clojure
+      code, a function can either be defined inline or a reference. 
+    + *:more* is a list of child tests. Note the call to *data-driven*
+      in the last node will create a list of 5 tests, with a row of
+      data embedded in each one.  The data used for each one will be
+      in the report.
 *** Optional keys
     + *:blockers* - A function that returns a list of items that are
-      blocking this test.  If this test should be skipped, this
-      function should return a list of reasons why it was skipped.
-      Reasons could include already-documented bugs, dependencies on
-      other tests (besides its tree ancestors, which are automatically
-      tracked). The type of each item returned by the function is up
-      to you, but generally strings or keywords work well.  
-    + *:configuration* - if set to logical true, this test is just setup
-      or teardown for some other test (usually setup for its
-      children). All this does is prevent this test from being
-      reported in the results.  However if it throws an exception, it
-      will be reported as a test failure, and prevent its children
-      from running.
-    + *:always-run* - if set to logical true, run this test even if its
-      parent did not pass.  It will still be guaranteed to run after
-      its parent.  If it passes, its children will be run.  
+      blocking this test. If this test should be skipped, this
+      function should return a list of reasons why it was skipped. For
+      example, already-documented bugs, dependencies on other tests
+      (besides its tree ancestors, which are automatically tracked).
+      The type of each item returned by the function is up to you, but
+      generally strings or keywords work well.
+    + *:configuration* - if set to logical true, marks this test as
+      just setup or teardown for some other test (usually setup for
+      its children). This option has no effect except to prevent this
+      test from being reported in the results as a passed test.
+      However if it fails, it will be reported.
+    + *:always-run* - if set to logical true, run this test even if
+      its parent did not pass. It will still be guaranteed to run
+      after its parent. If it passes, its children will be run. Use
+      this option with care, there aren't many scenarios where it is
+      necessary. In most cases, rather than use *:always-run*, you
+      should just move the test underneath a parent whose result it
+      cares about.
     + *:description* - a detailed description of the test.  Used for
       inclusion in reports such as testNG xml report.
 *** Metadata keys
-    These are configuration options for the entire suite.  
+    These are configuration options for the entire suite, all optional.  
     + *:threads* The number of threads that will run tests - no more
       than this number of tests will be run simultaneously.
-    + *:thread-runner* A function that takes 1 argument, also a
-      function.  This is used to do per-thread setup and teardown (if
-      necessary).  One example of where this might be used is for
-      browser testing, where a separate browser must be started for
-      each thread (and stopped when all tests are done).  This
-      function should perform any necessary setup, call the passed-in
-      function, and then perform any necessary cleanup.  You must call
-      the passed-in function - it kicks off actually running the
-      tests.
+    + *:thread-runner* (Advanced) If each thread needs to do some
+      setup and teardown (example, opening a browser when it starts,
+      and closing it when it ends), specify it here. It's a 1-arg
+      function where the body does setup, calls its argument as a
+      no-arg function, and then does any teardown. Calling the
+      argument function is what kicks off running the tests on this
+      thread.
+      #+BEGIN_EXAMPLE
+      :thread-runner (fn [run-tests] 
+                       (open-my-browser "firefox")
+                       (run-tests)
+                       (close-my-browser))
+      #+END_EXAMPLE
     + *:setup* Any configuration that needs to be done before anything
       else - reading from property files, logging setup, etc.
 ** Why use a tree?
 *** By arranging the tree by dependency, you get a lot for free.
+     + Dependencies are explicit.  Frameworks that use annotations
+       like TestNG or nosetests are very difficult to debug when the
+       tests don't run in the order you expect.  The framework
+       calculates the order and often it's very surprising what it
+       comes up with.
+     + Order can be rearranged be re-arranging the tree
+       programmatically.  The simplest way to do this is define
+       several subtrees, and then put them together however you like.
+       You can also very easily filter tests by name or tag or depth
+       or whatever you like.  The important thing is you can easily
+       view the resulting tree before you try to run it.
      + Ability to control depth of testing.  If you have a suite of 1000
        automated tests that take 8 hours to run, but you need to test a
        patch very quickly and only have 1 hour, you just set maxtime to

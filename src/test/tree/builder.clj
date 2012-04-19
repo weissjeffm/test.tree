@@ -53,12 +53,12 @@
                                  (zip/children z)))]
     (->> z zip/down (iterate zip/right) (take-while is-child?))))
 
-(defn data-driven "Generate a set of n data-driven tests from a
-                   template test, a function f that takes p arguments,
-                   and a n by p coll of colls containing the data for
-                   the tests. The metadata on either the overall set,
-                   or rows of data, will be extracted and merged with
-                   the tests"
+(defn data-driven "Generate a set of n data-driven tests. The first
+                   argument is a template test whose :steps function
+                   takes p arguments. The second argument is a n by p
+                   coll of colls containing the data for the tests.
+                   The metadata both the whole dataset and each row
+                   will be preserved."
   [test data]
   (for [item data]
     (->  test
