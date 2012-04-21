@@ -70,7 +70,6 @@
    (require 'test.tree)
 
    (def my-calc-suite  
-    (with-meta
      {:name "enter numbers"
       :steps calc.test/verify-entered-numbers
       :more [{:name "clear display"
@@ -85,7 +84,7 @@
                                    [[2 2] 4]
                                    [[1 -1] 0]
                                    [[1 2 3 4] 10]
-                                   [[1.23 4.56] 5.79]])}]}))
+                                   [[1.23 4.56] 5.79]])}]})
 
    (defn -main [ & args] 
     (test.tree/run-suite my-calc-suite))
