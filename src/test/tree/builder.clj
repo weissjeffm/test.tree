@@ -20,6 +20,14 @@
   java.lang.Object
   (realize [t] t))
 
+(defrecord Test
+    [name
+     steps
+     ^java.util.Collection more
+     blockers
+     configuration
+     always-run])
+
 (defn test-zip "Create a clojure.zip structure so the tree can be
                 easily walked."
   [tree]
