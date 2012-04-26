@@ -5,7 +5,7 @@
     reports.
 ** Philosophy
    Automated testing is programming. No amount of snake oil like
-   record/playback tools or keyword-driven testing is going to reduce
+   record/playback tools or writing tests in "plain english" is going to reduce
    the complexity of programming. In order to have automated tests,
    *someone* has to understand the complexity of the testcases and
    Software Under Test. That person must formally specify how each
