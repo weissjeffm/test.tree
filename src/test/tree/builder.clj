@@ -1,7 +1,8 @@
 (ns test.tree.builder
   (:require [clojure.zip :as zip])
   (:use [serializable.fn :only [fn]])
-  (:refer-clojure :exclude [fn]))
+  (:refer-clojure :exclude [fn])
+  (:import [java.io File]))
 
 ;;;
 ;;; pre-execution test manipulation functions
@@ -89,7 +90,8 @@
   (fn [z]
     (filter pred (-> z zip/root test-zip nodes))))
 
-(defn combine "combines two thunks into one, using juxt"
+(defn combine "combines two thunks into one, using juxt, and combine
+               the serialized fn metadata, if it's present."
   [f g]
   (let [[sf sg] (for [i [f g]] (-> (meta i) ::source))]
     (with-meta (juxt f g)
@@ -117,3 +119,21 @@
 (defn before-all [f n]
   (run-before (complement :configuration) f n))
 
+(defn read-tests [f] "Read a file that contains tests"
+  (let [tests (load-file f)]
+    (if (map? tests)
+      (vector tests)
+      tests)))
+
+(defn from-directory [dir] "Create a tree of tests read from a directory. Each clojure source file in the directory should contain a map or multiple maps that contain tests.  The tree will be contructed with empty configuration nodes for directories, with all tests underneath.  Multiple files in the same directory will be treated as if they were one big file."
+  (let [d (File. dir)
+        all (vec (.listFiles d))
+        dirs (filter #(.isDirectory %) all)
+        files (filter #(.isFile %) all)
+        clj-files (filter #(.endsWith (.getName %) ".clj") files)]
+    {:name (.getName d)
+     :configuration true
+     :steps (constantly nil)
+     :more (concat (mapcat #(read-tests (.getCanonicalPath %)) files)
+                   (for [dir dirs]
+                     (from-directory  (.getCanonicalPath dir))))}))
