@@ -11,23 +11,31 @@
                             (keyword? (second i)))))
      (map #(map second %))))
 
-(defmacro test [testname & options+steps]
-  (let [[options steps] (split-opts options+steps)]
-    (apply assoc `{:name ~testname
-                   :steps `(serializable.fn/fn [] ~@steps)}
-           options)))
+(defn split-deftests [args]
+  (let [deftest-var (resolve 'deftest)]
+    (split-with #(not= (resolve (first %)) deftest-var) args)))
 
-(defmacro group [ & forms]
+(defmacro deftest [testname & options+steps]
+  (let [[options steps] (split-opts options+steps)
+        [steps dependent-tests] (split-deftests steps)]
+    (merge `{:name ~testname
+             :steps (serializable.fn/fn [] ~@steps)}
+           (apply hash-map options)
+           (if (not (empty? dependent-tests))
+             {:more (vec dependent-tests)} {}))))
+
+(defmacro defgroup [ & forms]
   `(do (ns ~(symbol (first forms))
-         (:use 'test.tree.builder))
-       ))
+         (:use test.tree.builder
+               test.tree.script))
+       ~@(rest forms)))
 
 (defmacro data [argnames & rows]
   (vec rows))
 
-(defmacro data-driven-test [testname & options+kw+data]
+(defmacro deftest-datadriven [testname & options+kw+data]
   (let [[options [kw & data]] (split-opts options+kw+data)
-        thistest (apply assoc {:name testname
+        thistest (merge {:name testname
                                :steps kw}
-                        options)]
+                        (apply hash-map options))]
     `(data-driven ~thistest ~(vec data))))
