@@ -1,6 +1,8 @@
 (ns test.tree.builder
   (:require [clojure.zip :as zip])
-  (:use [serializable.fn :only [fn]])
+  (:use [serializable.fn :only [fn]]
+        [test.tree.reporter :only [result]]
+        test.tree.zip)
   (:refer-clojure :exclude [fn])
   (:import [java.io File]))
 
@@ -21,14 +23,6 @@
   java.lang.Object
   (realize [t] t))
 
-(defn test-zip "Create a clojure.zip structure so the tree can be
-                easily walked."
-  [tree]
-  (zip/zipper (constantly true)
-              :more 
-              (fn [node children]
-                (with-meta (conj node {:more children}) (meta node)))
-              tree))
 
 (defn tmap "Does a depth-first walk of the tree, passes each node thru
             f, and returns the tree"
@@ -46,14 +40,6 @@
   (tmap (fn [n] ((if (pred n) f identity) n))
         tree))
 
-(defn plain-node [m]
-  (dissoc m :more))
-
-(defn child-locs [z]
-  (let [is-child? (fn [loc] (some #{(and loc (zip/node loc))} 
-                                 (zip/children z)))]
-    (->> z zip/down (iterate zip/right) (take-while is-child?))))
-
 (defn data-driven "Generate a set of n data-driven tests. The first
                    argument is a template test whose :steps function
                    takes p arguments. The second argument is a n by p
@@ -69,10 +55,6 @@
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]
   (vector (reduce #(assoc %2 :more [%1]) (reverse tests))))
-
-(defn nodes [z]
-  (map (comp plain-node zip/node)
-       (take-while #(not (zip/end? %)) (iterate zip/next z))))
 
 (defn by-key [k vals]
   (fn [n]
@@ -116,8 +98,36 @@
   [pred f tree]
   (alter-nodes-matching pred (partial before-test f) tree))
 
-(defn before-all [f n]
+(defn run-after "Run f after every test that matches pred"
+  [pred f tree]
+  (alter-nodes-matching pred (partial after-test f) tree))
+
+(defn before-each [f n]
   (run-before (complement :configuration) f n))
+
+(defn after-each [f n]
+  (run-after (complement :configuration) f n))
+
+(defn wait-for-tree [tree]
+  (fn [_]
+    (doseq [t (nodes (test-zip tree))]
+           (result t))
+    []))
+
+(defn before-all [t n]
+  (let [add-child-fn (if (map? n)
+                       zip/append-child
+                       (fn [loc testlist] (test-zip (zip/make-node loc t testlist))))]
+    (-> t
+      test-zip
+      (add-child-fn n)
+      zip/root)))
+
+(defn after-all [t n]
+  (-> n
+     test-zip
+     (zip/append-child (assoc t :blockers (wait-for-tree n)))
+     zip/root))
 
 (defn read-tests [f] "Read a file that contains tests"
   (let [tests (load-file f)]

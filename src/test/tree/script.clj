@@ -1,5 +1,5 @@
 (ns test.tree.script
-  (:use [test.tree.builder :only [data-driven]]))
+  (:use [test.tree.builder :only [data-driven before-all after-all before-each after-each]]))
 
 (defn split-opts [args]
   "split a list at the first item that's in an even index (zero based)
@@ -32,8 +32,50 @@
                         (apply hash-map options))]
     `(data-driven ~thistest ~@rows)))
 
-;; (defmacro defgroup [ & forms]
-;;   `(do (ns ~(symbol (first forms))
-;;          (:use test.tree.builder
-;;                test.tree.script))
-;;        ~@(rest forms)))
+(defn add-test-setup [group setup]
+  (if setup
+    (before-each setup group)
+    group))
+
+(defn add-test-teardown [group teardown]
+  (if teardown
+    (after-each teardown group)
+    group))
+
+(defn add-group-setup [group groupname setup]
+  (if (and (map? group) (not setup))
+    group
+    (before-all {:name (format "Setup for %s" groupname)
+                 :configuration true
+                 :steps (or setup (constantly nil))}
+                group)))
+
+(defn add-group-teardown [group groupname teardown]
+  (if teardown
+    (after-all {:name (format "Teardown for %s" groupname)
+                :configuration true
+                :steps teardown}
+               group)))
+
+(defn normalize "make sure it's either a single map or vector of maps - NOT a plain list"
+  [tests]
+  (if (map? tests) tests (vec tests)))
+
+(defmacro defgroup [sym & opts+forms]
+  (let [[opts forms] (split-opts opts+forms)
+        opts (apply hash-map opts)
+        groupname (str sym)]
+    `(def ^:dynamic ~sym
+       (-> ~(vec forms)
+          normalize
+          (add-group-setup ~groupname ~(:group-setup opts))
+          (add-test-setup ~(:test-setup opts))
+          (add-test-teardown ~(:test-teardown opts))
+          (add-group-teardown ~groupname ~(:group-teardown opts))  ;;do last because we don't want to
+                                                                   ;; alter tests after we've set up a wait for them.
+          ))))
+
+;;getting NPE trying to find the result for tests the group-teardown
+;;is waiting for.  i assume they've been altered between the time we
+;;set up the :blockers and when the tests actually run, so that we
+;; don't find them in the reports later?

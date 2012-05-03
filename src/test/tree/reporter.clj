@@ -1,7 +1,7 @@
 (ns test.tree.reporter
   (:require [clojure.prxml :as xml])
   (:use clojure.pprint
-        [test.tree.builder :only [nodes]]
+        [test.tree.zip :only [nodes]]
         [clj-stacktrace.repl :only [pst-str]]))
 
 (declare reports)

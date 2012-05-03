@@ -2,8 +2,9 @@
   (:require [clojure.zip :as zip]
             [clojure.pprint :as pprint])
   (:use slingshot.slingshot
-        [clojure.core.incubator :only [-?>]] 
-        [test.tree.builder :only [plain-node child-locs test-zip nodes realize]]
+        [clojure.core.incubator :only [-?>]]
+        test.tree.zip
+        [test.tree.builder :only [realize]]
         [test.tree.reporter :only [passed? reports init-reports junit-report testng-report]])
   
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
