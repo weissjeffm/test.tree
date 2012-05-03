@@ -79,3 +79,18 @@
 ;;is waiting for.  i assume they've been altered between the time we
 ;;set up the :blockers and when the tests actually run, so that we
 ;; don't find them in the reports later?
+
+(comment (def mytest (defgroup xyz
+               :test-setup (fn [] (println "pre-test thing"))
+               :group-setup (fn [] (println "configuring the whole group"))
+               :group-teardown (fn [] (println "cleaning up group!"))
+               :test-teardown (fn [] (println "cleanin up test"))
+           
+               (deftest "asdf"
+                 (+ 1 1))
+
+               (deftest "zyz"
+                 (- 2 1))
+
+               (deftest "bar"
+                 (/ 5 2)))))
