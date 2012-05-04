@@ -14,16 +14,31 @@
   (let [deftest-var (resolve 'deftest)]
     (split-with #(not= (resolve (first %)) deftest-var) args)))
 
-(defmacro deftest [testname & options+steps]
-  (if (= testname :data-driven)
-    (conj options+steps `deftest-datadriven)
-    (let [[options steps] (split-opts options+steps)
-          [steps dependent-tests] (split-deftests steps)]
+(defn normalize "make sure it's either a single map or vector of maps - NOT a plain list"
+  [tests]
+  (if (map? tests) tests
+      (vec tests)))
+
+(defmacro deftest
+  "Defines a test with name testname (a string), optional pairs of
+  keywords and their values, and forms that comprise the test
+  procedure. Finally, more nested deftest forms can optionally be
+  added at the end. Expands into a plain map. See the main test.tree
+  documentation for the available options and how nesting should be
+  done. Example: (deftest 'add 2 and 2' :description 'adds
+  numbers' (assert (-> (+ 2 2) (= 4)))) "
+  [testname & options+steps]
+  (let [[options allsteps] (split-opts options+steps)
+        optmap (apply hash-map options)
+        [steps dependent-tests] (split-deftests allsteps)]
+    (if (:data-driven optmap)
+      (conj (concat (mapcat vec (dissoc optmap :data-driven))
+                    allsteps) testname `deftest-datadriven)
       (merge `{:name ~testname
                :steps (serializable.fn/fn [] ~@steps)}
-             (apply hash-map options)
+             optmap
              (if (not (empty? dependent-tests))
-               {:more (vec dependent-tests)} {})))))
+               {:more `(vec (flatten ~(vec dependent-tests)))} {})))))
 
 (defmacro deftest-datadriven [testname & options+kw+data]
   (let [[options [kw & rows]] (split-opts options+kw+data)
@@ -55,13 +70,25 @@
     (after-all {:name (format "Teardown for %s" groupname)
                 :configuration true
                 :steps teardown}
-               group)))
+               group)
+    group))
 
-(defn normalize "make sure it's either a single map or vector of maps - NOT a plain list"
-  [tests]
-  (if (map? tests) tests (vec tests)))
-
-(defmacro defgroup [sym & opts+forms]
+(defmacro defgroup
+  "Defines a group of tests as a normal var, named sym. Inside the
+   form should be a optional pairs of keywords and their values,
+   followed by one or more tests. Tests are most easily written using
+   deftest, but any thing that returns valid test maps are allowed.
+   The options are
+    :group-setup (a function to run before anything in the
+    group)
+    :group-teardown (function to run after everything in the group)
+    :test-setup (function to run before each and every test in the group)
+    :test-teardown (function to run after each and every test in the
+    group)
+   All the functions should take no arguments. defgroup forms
+    cannot be nested, but you can refer to a group anywhere using its
+    var (including in another defgroup). See also deftest." [sym &
+    opts+forms]
   (let [[opts forms] (split-opts opts+forms)
         opts (apply hash-map opts)
         groupname (str sym)]
@@ -71,26 +98,22 @@
           (add-group-setup ~groupname ~(:group-setup opts))
           (add-test-setup ~(:test-setup opts))
           (add-test-teardown ~(:test-teardown opts))
-          (add-group-teardown ~groupname ~(:group-teardown opts))  ;;do last because we don't want to
-                                                                   ;; alter tests after we've set up a wait for them.
+          (add-group-teardown ~groupname ~(:group-teardown opts)) ;;do last because we don't want to
+          ;; alter tests after we've set up a wait for them.
           ))))
 
-;;getting NPE trying to find the result for tests the group-teardown
-;;is waiting for.  i assume they've been altered between the time we
-;;set up the :blockers and when the tests actually run, so that we
-;; don't find them in the reports later?
-
-(comment (def mytest (defgroup xyz
-               :test-setup (fn [] (println "pre-test thing"))
-               :group-setup (fn [] (println "configuring the whole group"))
-               :group-teardown (fn [] (println "cleaning up group!"))
-               :test-teardown (fn [] (println "cleanin up test"))
+(comment (def mytest
+           (defgroup xyz
+             :test-setup (fn [] (println "pre-test thing"))
+             :group-setup (fn [] (println "configuring the whole group"))
+             :group-teardown (fn [] (println "cleaning up group!"))
+             :test-teardown (fn [] (println "cleanin up test"))
            
-               (deftest "asdf"
-                 (+ 1 1))
+             (deftest "asdf"
+               (+ 1 1))
 
-               (deftest "zyz"
-                 (- 2 1))
+             (deftest "zyz"
+               (- 2 1))
 
-               (deftest "bar"
-                 (/ 5 2)))))
+             (deftest "bar"
+               (/ 5 2)))))

@@ -47,10 +47,10 @@
                    The metadata both the whole dataset and each row
                    will be preserved."
   [test data]
-  (for [item data]
-    (->  test
-        (merge (meta data) (meta item))
-        (assoc :parameters item))))
+  (vec (for [item data]
+         (->  test
+             (merge (meta data) (meta item))
+             (assoc :parameters (vec item))))))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]
