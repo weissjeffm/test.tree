@@ -1,7 +1,7 @@
 (ns test.tree.builder
   (:require [clojure.zip :as zip])
   (:use [serializable.fn :only [fn]]
-        [test.tree.reporter :only [result]]
+        [test.tree.reporter :only [result passed?]]
         test.tree.zip)
   (:refer-clojure :exclude [fn])
   (:import [java.io File]))
@@ -50,7 +50,10 @@
   (vec (for [item data]
          (->  test
              (merge (meta data) (meta item))
-             (assoc :parameters (vec item))))))
+             (assoc :parameters (if (coll? item) (vec item) item))))))
+
+(defn lazy-literal-seq [coll]
+  (reduce (fn [orig form] `(lazy-seq (cons ~form ~orig))) nil (reverse coll)))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]
@@ -82,9 +85,21 @@
                {::source (concat sf (drop 2 sg))}
                {})))))
 
-(defn juxtcat [& fs]
+(defn union
+  "Takes the given functions and returns a new function. When that
+   function is called, it calls all the original functions and
+   concatenates their results. In clojure.core terminology, this
+   function would be called juxtcat."
+  [& fs]
   (fn [& args]
     (apply concat (apply (apply juxt fs) args))))
+
+(defn blocking-tests
+  "Takes names of tests, returns a function, that when called, filters
+   the list of names to only include tests that have failed or
+   skipped."
+  [& names]
+  (filter-tests (every-pred (named? names) (complement passed?))))
 
 (defn before-test "Run f before the steps of test node n" [f n]
   (let [s (:steps n)]

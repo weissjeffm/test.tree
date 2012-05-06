@@ -19,6 +19,17 @@
   (if (map? tests) tests
       (vec tests)))
 
+(defmacro runtime-data
+  "Creates data for a data driven test, where each row of data will
+  not be evaluated until the test is actually run. This is only useful
+  for when you want each run of the data-driven test to use different
+  data each time. example: (runtime-data [(System/currentTimeMillis)]
+  [(Math/random)]) every time you run your test, each data item will
+  contain a new value. If having test data fixed at compile time is
+  ok, then you can just use plain literals: [ [12345] [0.14159] ]"
+  [& coll]
+  (vec (for [item coll] `(serializable.fn/fn [] ~item))))
+
 (defmacro deftest
   "Defines a test with name testname (a string), optional pairs of
   keywords and their values, and forms that comprise the test
@@ -57,12 +68,13 @@
     (after-each teardown group)
     group))
 
-(defn add-group-setup [group groupname setup]
+(defn add-group-setup [group groupname setup blockers]
   (if (and (map? group) (not setup))
     group
-    (before-all {:name (format "Setup for %s" groupname)
-                 :configuration true
-                 :steps (or setup (constantly nil))}
+    (before-all (merge {:name (format "Setup for %s" groupname)
+                        :configuration true
+                        :steps (or setup (constantly nil))}
+                       (if blockers {:blockers blockers} {}))
                 group)))
 
 (defn add-group-teardown [group groupname teardown]
@@ -85,17 +97,19 @@
     :test-setup (function to run before each and every test in the group)
     :test-teardown (function to run after each and every test in the
     group)
-   All the functions should take no arguments. defgroup forms
-    cannot be nested, but you can refer to a group anywhere using its
-    var (including in another defgroup). See also deftest." [sym &
-    opts+forms]
+    :blockers (function returning a list of blockers for this whole group
+   of tests.  See main test.tree documentation.)
+  All the functions should take no arguments unless
+   otherwise specified. defgroup forms cannot be nested, but you can
+   refer to a group anywhere using its var (including in another
+   defgroup). See also deftest." [sym & opts+forms]
   (let [[opts forms] (split-opts opts+forms)
         opts (apply hash-map opts)
         groupname (str sym)]
     `(def ^:dynamic ~sym
        (-> ~(vec forms)
           normalize
-          (add-group-setup ~groupname ~(:group-setup opts))
+          (add-group-setup ~groupname ~(:group-setup opts) ~(:blockers opts))
           (add-test-setup ~(:test-setup opts))
           (add-test-teardown ~(:test-teardown opts))
           (add-group-teardown ~groupname ~(:group-teardown opts)) ;;do last because we don't want to
