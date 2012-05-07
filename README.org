@@ -25,32 +25,50 @@
 ** How do I use it?
    Test.tree takes a nested set of tests as input (thereby creating a
    tree structure). It executes the tests starting with the root,
-   working its way out to the leaves. It only has one important
-   contract - that no child test will be run before its parent.
-   However, this contract has some important consequences:
-   + Each expanding level of the tree should be more and more detailed
-     testing. Each node will only be run if its parent passes. *See
-     the example below*. If you were testing a calculator app, entering
-     numbers would probably be at the root. If that fails, nothing
-     else can be tested. A test that adds 2 numbers could be a child,
-     a test that adds ten numbers could be a grandchild node.
-   + Each test should be *atomic* in terms of what it does to the [[http://en.wikipedia.org/wiki/System_under_test][SUT]].
-     This is a best practice in *any* automated test suite, but it's
-     required for test.tree. The only guarantee test.tree makes about
-     a test is that its parent will have passed before it is executed.
-     Tests should be written accordingly - they must not assume the
-     [[http://en.wikipedia.org/wiki/System_under_test][SUT]] hasn't been touched since the parent test finished. Tests
-     should do their own setup in the SUT to avoid collisions with other
-     tests that may run at the same time.  It is possible for parent
-     tests to share information with a child test however. 
+   working its way out to the leaves. It only has one major contract -
+   that no child test will be run before its parent. However, this
+   contract has some important consequences:
+   + Each node will only be run if its parent passes. *See the example
+     below*. If you were testing a calculator app, entering numbers
+     would probably be at the root. If that fails, nothing else can be
+     tested. A test that adds 2 numbers could be a child, a test that
+     adds ten numbers could be a grandchild node. In general, as you
+     go deeper into the tree, the tests should be more detailed and
+     stringent.
+   + Each test should be *atomic* in what it does to the state of the
+     [[http://en.wikipedia.org/wiki/System_under_test][SUT]]. This is a best practice in *any* automated test suite, but
+     it's required for test.tree. Tests cannot assume that the SUT is
+     still in the exact state the parent test left it, other tests
+     could run in the interim, or simultaneously.  Each test must
+     avoid collisions with other tests in the SUT.  Concurrent testing
+     is disabled by default, so if your SUT cannot support it, you
+     don't have to worry.
+
+*** Controlling order of test execution
+    Sibling tests are not executed in any particular order. If you
+    need to enforce some order, here are some examples of how it's
+    done. (TODO: code examples)
+    + If you have a set of 5 tests, and one of them must be executed
+      before the other 4, then that test should be the parent, and the
+      other 4 should be children.
+    + If you have a set of 5 tests that must be executed in a
+      *specific* order, you can pass the list of tests in the correct
+      order to test.tree.builder/dep-chain function, and it will nest
+      them for you.
+    + If you have a set of 5 tests, and one of them must be executed
+      after the other 4, you can use test.tree.builder/after-all
+      function to force the extra dependencies.
+
+*** Doing setup and teardown for tests or groups of tests
+    See below, under [[#OptionalKeys][Optional Keys]]
 
 *** Data Driven Testing
     It's very easy to do data driven testing.  All you need is a
     function, and sets of arguments to pass to that function.
     
     In test.tree, you just add the option *:data-driven true* to
-    deftest. And instead of including steps to run, you have a
-    function, and data. The data should be a list of lists.
+    deftest. And instead of including steps to run, you include a
+    function and data. The data should be a list of lists.
 
     A common idiom is to write a function that takes some input to
     give to your SUT, and some value you expect to get back from your
@@ -110,6 +128,10 @@
 
 
 *** Optional keys
+:PROPERTIES:
+:CUSTOM_ID: OptionalKeys
+:END:
+
     Options be placed inside deftest or defgroup, after the name. 
     #+BEGIN_EXAMPLE
     (deftest "my test"
