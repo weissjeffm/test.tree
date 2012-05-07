@@ -4,17 +4,13 @@
     allows flexible grouping and ordering of tests, and creates
     reports.
 ** Philosophy
-   Automated testing is programming. No amount of snake oil like
-   record/playback tools or writing tests in "plain english" is going to reduce
-   the complexity of programming. In order to have automated tests,
-   *someone* has to understand the complexity of the testcases and
-   Software Under Test. That person must formally specify how each
-   test should be performed. This is why programming languages exist -
-   to formally specify a process. Test.tree's design goal is to be a
-   simple library, not an application. It has a minimalist design that
-   uses nothing but Clojure's basic types - functions, lists, and
-   maps. It provides the pieces, and you put them together however you
-   want.
+   Automated testing is programming. Test.tree's design goal is to be
+   a simple library, not an application to whom you must hand over
+   full control. It is written in Clojure because it makes no
+   distinction between data and code (what are automated test
+   procedures, data or code? I don't know). It has a minimalist design
+   that uses nothing but basic types - functions, lists, and maps. It
+   provides the pieces, and you put them together however you want.
 ** Sampling of supported scenarios:
     + Run many tests in parallel
     + Generate data-driven tests
@@ -27,8 +23,8 @@
     + Control depth of testing
 
 ** How do I use it?
-   Test.tree takes a nested data structure as input (in the form of a
-   tree of tests). It executes the tests starting with the root,
+   Test.tree takes a nested set of tests as input (thereby creating a
+   tree structure). It executes the tests starting with the root,
    working its way out to the leaves. It only has one important
    contract - that no child test will be run before its parent.
    However, this contract has some important consequences:
@@ -38,8 +34,6 @@
      numbers would probably be at the root. If that fails, nothing
      else can be tested. A test that adds 2 numbers could be a child,
      a test that adds ten numbers could be a grandchild node.
-   + Each node is a map - it contains the test's name, its steps, and
-     a list of child tests.
    + Each test should be *atomic* in terms of what it does to the [[http://en.wikipedia.org/wiki/System_under_test][SUT]].
      This is a best practice in *any* automated test suite, but it's
      required for test.tree. The only guarantee test.tree makes about
@@ -47,69 +41,122 @@
      Tests should be written accordingly - they must not assume the
      [[http://en.wikipedia.org/wiki/System_under_test][SUT]] hasn't been touched since the parent test finished. Tests
      should do their own setup in the SUT to avoid collisions with other
-     tests that may run at the same time. 
+     tests that may run at the same time.  It is possible for parent
+     tests to share information with a child test however. 
+
+*** How do I write a test?
 
 *** Data Driven Testing
-    It's very easy to do data driven testing. Computer Science
-    invented data driven testing many decades ago, it's called [[http://en.wikipedia.org/wiki/Partial_application][Partial
-    Application]]. When a test is actually run, it is a function that
-    take no arguments. But it's very easy to build no-arg functions
-    that have their args "built in". See
-    *test.tree.builder/data-driven* to build a list of data-driven
-    tests.
+    It's very easy to do data driven testing. When a test is actually
+    run, it is a function that take no arguments. But it's very easy
+    to build no-arg functions that have their args "built in".
+    Clojure code makes frequent use of [[http://en.wikipedia.org/wiki/Partial_application][Partial
+    Application]], and that's exactly what is used to build data-driven
+    tests in test.tree.
 
     A common idiom is to write a function that takes some input to
     give to your SUT, and some value you expect to get back from your
     SUT.  The function enters the input and compares the output to the
     expected value.  To do data driven testing, you just create a
-    bunch of rows of [input expected-value].  See the example below.
+    bunch of rows of [input, expected-value].  See the example below.
 
 ** Example test suite program
    #+BEGIN_EXAMPLE
    (require 'calc.test)
-   (require 'test.tree)
+   (use 'test.tree.script)
 
-   (def my-calc-suite  
-     {:name "enter numbers"
-      :steps calc.test/verify-entered-numbers
-      :more [{:name "clear display"
-              :steps calc.test/verify-clear
-              :more [{:name "enter numbers after clear"
-                      :steps calc.test/verify-entered-numbers}]}
-             {:name "display cleared after pressing operator"
-              :steps calc.test/verify-operator-clears
-              :more (data-driven {:name "add numbers"
-                                  :steps calc.test/add}
-                                  [[[1 1] 2]
-                                   [[2 2] 4]
-                                   [[1 -1] 0]
-                                   [[1 2 3 4] 10]
-                                   [[1.23 4.56] 5.79]])}]})
+   (defgroup simple-calc-tests 
+      :group-setup calc.test/open-app
+      :group-teardown calc.test/close-app
+
+      (deftest "enter numbers"
+        (calc.test/enter-number 123)
+        (assert (= (calc.test/current-display "123")))
+
+        (deftest "clear display"
+           (calc.test/enter-number 234)
+           (calc.test/clear-display)
+           (assert (= (calc.test/current-display ")))
+
+           (deftest "add numbers"
+              :data-driven true
+              
+              calc.test/add
+              [[[1 1] 2]
+              [[2 2] 4]
+              [[1 -1] 0]
+              [[1 2 3 4] 10]
+              [[1.23 4.56] 5.79]]))))
 
    (defn -main [ & args] 
-    (test.tree/run-suite my-calc-suite))
+    (test.tree/run-suite simple-calc-tests))
    #+END_EXAMPLE
-*** Test keys
-    + *:name* is your choice of name, generally a string.
-    + *:steps* is a function that take no arguments. Like any clojure
-      code, a function can either be defined inline or a reference. 
-    + *:more* is a list of child tests. Note the call to *data-driven*
-      in the last node will create a list of 5 tests, with a row of
-      data embedded in each one.  The data used for each one will be
-      in the report.
+
+   Note that defgroup created a var called *simple-calc-tests*, that
+   is later used to tell run-suite what tests to run. You can also
+   refer to a group's var within another defgroup, to build up a larger
+   structure of tests.
+
+   #+BEGIN_EXAMPLE
+   (defgroup all-tests
+     simple-calc-tests
+     scientific-calc-tests
+     trig-calc-tests)
+   
+   (defn -main [ & args] 
+     (test.tree/run-suite all-calc-tests))
+   #+END_EXAMPLE
+
+
 *** Optional keys
-    + *:blockers* - A function that returns a list of items that are
-      blocking this test. If this test should be skipped, this
-      function should return a list of reasons why it was skipped. For
-      example, already-documented bugs, dependencies on other tests
-      (besides its tree ancestors, which are automatically tracked).
-      The type of each item returned by the function is up to you, but
-      generally strings or keywords work well.
-    + *:configuration* - if set to logical true, marks this test as
-      just setup or teardown for some other test (usually setup for
-      its children). This option has no effect except to prevent this
-      test from being reported in the results as a passed test.
-      However if it fails, it will be reported.
+    Options be placed inside deftest or defgroup, after the name. 
+    #+BEGIN_EXAMPLE
+    (deftest "my test"
+       :blockers (constantly ["this test is currently disabled"])
+       :description "Runs foobar widget tests."
+        
+       (my-step1)
+       (my-step2))
+    #+END_EXAMPLE
+    + *:group-setup* - defgroup only.  Before any test in the group is
+      run, run the given no-arg function.  
+    + *:group-teardown* - defgroup only.  After all the tests in the
+      group have been run (or skipped), run the given no-arg function.
+    + *:test-setup* - defgroup only. Before each and every test in the
+      group, run this function.  Note
+      this function should take a variable number of args but again
+      can safely ignore the args (in clojure an ignored argument is
+      usually named _ by convention).
+      #+BEGIN_EXAMPLE
+      (defgroup calc-division-tests
+         :test-setup (fn [& _] (calc.test/clear-display))
+         
+         (deftest ... )
+         (deftest ... ) ... )  
+      #+END_EXAMPLE
+    + *:test-teardown* - defgroup only.  Same as test-setup, but runs
+      *after* each and every test.
+    + *:blockers* - A callback function to determine at runtime if
+      this test should be skipped before it's attempted. If you have a
+      test that's been failing every run and there's nothing further
+      you can do to get it fixed, you may want to block it from being
+      run. That way, it doesn't pollute your test results. If this
+      test should be skipped, this function should return a list of
+      reasons why it was skipped. For example, already-reported bugs,
+      missing dependencies, or that you've disabled it temporarily.
+      The type of each item returned by the function is up to you -
+      whatever you would want to see to explain why a test was
+      skipped. Generally strings or keywords work well. This callback
+      function will receive one argument, it's safe for the function
+      to ignore the argument. It's used by some built-in callback
+      functions that are provided in test.tree. 
+      #+BEGIN_EXAMPLE
+      (deftest "my test"
+         :blockers (fn [_] (my.bugtracker.client/is-bug-still-open? "bug654321"))
+         
+         (my-step1)
+         (my-step2))
+      #+END_EXAMPLE
     + *:always-run* - if set to logical true, run this test even if
       its parent did not pass. It will still be guaranteed to run
       after its parent. If it passes, its children will be run. Use
@@ -130,15 +177,37 @@
       no-arg function, and then does any teardown. Calling the
       argument function is what kicks off running the tests on this
       thread.
-      #+BEGIN_EXAMPLE
-      :thread-runner (fn [run-tests] 
-                       (open-my-browser "firefox")
-                       (run-tests)
-                       (close-my-browser))
-      #+END_EXAMPLE
     + *:setup* Any configuration that needs to be done before anything
       else - reading from property files, logging setup, etc.
-** Why use a tree?
+
+    #+BEGIN_EXAMPLE
+    (def tests-to-run 
+      (with-meta all-calc-tests
+        {:setup (read-properties "/home/user/my.properties")
+         :thread-runner (fn [run-tests] 
+                          (open-my-browser "firefox")
+                          (run-tests)
+                          (close-my-browser))
+         :threads 5}
+    (defn -main [ & args] 
+      (test.tree/run-suite all-calc-tests))
+    #+END_EXAMPLE
+
+
+*** Optional keys
+    Options be placed inside deftest or defgroup, after the name. 
+    #+BEGIN_EXAMPLE
+    (deftest "my test"
+       :blockers (constantly ["this test is currently disabled"])
+
+    #+END_EXAMPLE
+
+** Advanced Usage
+   Test.tree tests are really just map objects.  deftest and defgroup
+   are just syntactic sugar to produce these maps.  In the calculator
+   example above, if you print out my-calc-tests at the REPL, you'll
+   see what's under the covers.
+** Why use a tree structure?
 *** By arranging the tree by dependency, you get a lot for free.
      + Dependencies are explicit.  Frameworks that use annotations
        like TestNG or nosetests are very difficult to debug when the
