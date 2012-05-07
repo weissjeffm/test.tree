@@ -159,16 +159,6 @@
         grouped-by-class (group-by :name (keys @reports))
         to-ms-str #(-> (* % 1000) Math/round str)
         suite-duration-ms (to-ms-str (total-time))
-<<<<<<< HEAD
-        info (fn [t] {:name (:name t)
-                     :is-config (-> t :configuration boolean str)
-                     :duration-ms (to-ms-str (execution-time t))
-                     :status (cond (skipped? t) "SKIP"
-                                   (passed? t) "PASS"
-                                   (failed? t) "FAIL")
-                     :signature (try (format "%s%s" (:name t) (-> t :steps second))
-                                     (catch Exception e "sig"))})]
-=======
         date-format (fn [unixdate] (.format testng-dateformat (java.util.Date. unixdate)))
         info (fn [t tr] (merge {:name (:name t)
                                :duration-ms (to-ms-str (execution-time t))
@@ -180,9 +170,7 @@
                                :started-at (date-format (:start-time tr))
                                :finished-at (date-format (:end-time tr))
                                :description (or (:description t) "")}
-                              (when (:configuration t) {:is-config "true"})))]
->>>>>>> 54fe24dfb17fcd1a7545ca6a7cff548ae5e6cb40
-   
+                              (when (:configuration t) {:is-config "true"})))]   
     (binding [xml/*prxml-indent* 2]
       (xml/prxml [:decl! {:version "1.0"} ]
                  [:testng-results {:total (str total)
