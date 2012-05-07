@@ -1,20 +1,28 @@
 (ns test.tree.builder
   (:require [clojure.zip :as zip])
-  (:use [serializable.fn :only [fn]])
-  (:refer-clojure :exclude [fn]))
+  (:use [serializable.fn :only [fn]]
+        [test.tree.reporter :only [result passed?]]
+        test.tree.zip)
+  (:refer-clojure :exclude [fn])
+  (:import [java.io File]))
 
 ;;;
 ;;; pre-execution test manipulation functions
 ;;;
 
-(defn test-zip "Create a clojure.zip structure so the tree can be
-                easily walked."
-  [tree]
-  (zip/zipper (constantly true)
-              :more 
-              (fn [node children]
-                (with-meta (conj node {:more children}) (meta node)))
-              tree))
+(defprotocol Delay
+  (realize [d]))
+
+(extend-protocol Delay
+  clojure.lang.Fn
+  (realize [t] (.call t))
+
+  clojure.lang.Delay
+  (realize [t] (clojure.core/force t))
+
+  java.lang.Object
+  (realize [t] t))
+
 
 (defn tmap "Does a depth-first walk of the tree, passes each node thru
             f, and returns the tree"
@@ -32,37 +40,24 @@
   (tmap (fn [n] ((if (pred n) f identity) n))
         tree))
 
-(defn plain-node [m]
-  (dissoc m :more))
+(defn data-driven "Generate a set of n data-driven tests. The first
+                   argument is a template test whose :steps function
+                   takes p arguments. The second argument is a n by p
+                   coll of colls containing the data for the tests.
+                   The metadata both the whole dataset and each row
+                   will be preserved."
+  [test data]
+  (vec (for [item data]
+         (->  test
+             (merge (meta data) (meta item))
+             (assoc :parameters (if (coll? item) (vec item) item))))))
 
-(defn child-locs [z]
-  (let [is-child? (fn [loc] (some #{(and loc (zip/node loc))} 
-                                 (zip/children z)))]
-    (->> z zip/down (iterate zip/right) (take-while is-child?))))
-
-(defn data-driven "Generate a set of n data-driven tests from a
-                   template test, a function f that takes p arguments,
-                   and a n by p coll of colls containing the data for
-                   the tests. The metadata on either the overall set,
-                   or rows of data, will be extracted and merged with
-                   the tests"
-  [test f data]
-  (for [item data]
-    (merge test
-           (meta data)
-           (meta item)
-           {:steps (with-meta
-                     (fn [] (apply f (if (fn? item) (item) item)))
-                     (meta f))
-            :parameters item})))
+(defn lazy-literal-seq [coll]
+  (reduce (fn [orig form] `(lazy-seq (cons ~form ~orig))) nil (reverse coll)))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]
   (vector (reduce #(assoc %2 :more [%1]) (reverse tests))))
-
-(defn nodes [z]
-  (map (comp plain-node zip/node)
-       (take-while #(not (zip/end? %)) (iterate zip/next z))))
 
 (defn by-key [k vals]
   (fn [n]
@@ -80,7 +75,8 @@
   (fn [z]
     (filter pred (-> z zip/root test-zip nodes))))
 
-(defn combine "combines two thunks into one, using juxt"
+(defn combine "combines two thunks into one, using juxt, and combine
+               the serialized fn metadata, if it's present."
   [f g]
   (let [[sf sg] (for [i [f g]] (-> (meta i) ::source))]
     (with-meta (juxt f g)
@@ -89,9 +85,21 @@
                {::source (concat sf (drop 2 sg))}
                {})))))
 
-(defn juxtcat [& fs]
+(defn union
+  "Takes the given functions and returns a new function. When that
+   function is called, it calls all the original functions and
+   concatenates their results. In clojure.core terminology, this
+   function would be called juxtcat."
+  [& fs]
   (fn [& args]
     (apply concat (apply (apply juxt fs) args))))
+
+(defn blocking-tests
+  "Takes names of tests, returns a function, that when called, filters
+   the list of names to only include tests that have failed or
+   skipped."
+  [& names]
+  (filter-tests (every-pred (named? names) (complement passed?))))
 
 (defn before-test "Run f before the steps of test node n" [f n]
   (let [s (:steps n)]
@@ -105,6 +113,52 @@
   [pred f tree]
   (alter-nodes-matching pred (partial before-test f) tree))
 
-(defn before-all [f n]
+(defn run-after "Run f after every test that matches pred"
+  [pred f tree]
+  (alter-nodes-matching pred (partial after-test f) tree))
+
+(defn before-each [f n]
   (run-before (complement :configuration) f n))
 
+(defn after-each [f n]
+  (run-after (complement :configuration) f n))
+
+(defn wait-for-tree [tree]
+  (fn [_]
+    (doseq [t (nodes (test-zip tree))]
+           (result t))
+    []))
+
+(defn before-all [t n]
+  (let [add-child-fn (if (map? n)
+                       zip/append-child
+                       (fn [loc testlist] (test-zip (zip/make-node loc t testlist))))]
+    (-> t
+      test-zip
+      (add-child-fn n)
+      zip/root)))
+
+(defn after-all [t n]
+  (-> n
+     test-zip
+     (zip/append-child (assoc t :blockers (wait-for-tree n)))
+     zip/root))
+
+(defn read-tests [f] "Read a file that contains tests"
+  (let [tests (load-file f)]
+    (if (map? tests)
+      (vector tests)
+      tests)))
+
+(defn from-directory [dir] "Create a tree of tests read from a directory. Each clojure source file in the directory should contain a map or multiple maps that contain tests.  The tree will be contructed with empty configuration nodes for directories, with all tests underneath.  Multiple files in the same directory will be treated as if they were one big file."
+  (let [d (File. dir)
+        all (vec (.listFiles d))
+        dirs (filter #(.isDirectory %) all)
+        files (filter #(.isFile %) all)
+        clj-files (filter #(.endsWith (.getName %) ".clj") files)]
+    {:name (.getName d)
+     :configuration true
+     :steps (constantly nil)
+     :more (concat (mapcat #(read-tests (.getCanonicalPath %)) files)
+                   (for [dir dirs]
+                     (from-directory  (.getCanonicalPath dir))))}))
