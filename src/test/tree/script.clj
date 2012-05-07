@@ -17,7 +17,7 @@
 (defn normalize "make sure it's either a single map or vector of maps - NOT a plain list"
   [tests]
   (if (map? tests) tests
-      (vec tests)))
+      (vec (flatten tests))))
 
 (defmacro runtime-data
   "Creates data for a data driven test, where each row of data will
