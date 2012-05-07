@@ -44,7 +44,12 @@
                                         :steps (fn [] (Thread/sleep 400) (println (str "there2.6 " myvar)))}
                                        {:name "do that7"
                                         :blockers (builder/filter-tests (every-pred (builder/named? ["do that2"]) (complement reporter/passed?)))
-                                        :steps (fn [] (Thread/sleep 400) (println "there2.7"))}]}
+                                        :steps (fn [] (Thread/sleep 400) (println "there2.7"))
+                                        :more (builder/data-driven {:name "do datadriven"}
+                                                                   (fn [i]
+                                                                     (Thread/sleep 1000)
+                                                                     (println "did datadriven " i))
+                                                                   [[1] [5] [22] ["hi"] [["a" "b"]]])}]}
                                
                                {:name "borg4"
                                 :steps (fn [] (Thread/sleep 500) (println "there4"))
