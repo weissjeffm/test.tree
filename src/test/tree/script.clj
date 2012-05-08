@@ -1,5 +1,5 @@
 (ns test.tree.script
-  (:use [test.tree.builder :only [data-driven before-all after-all before-each after-each]]))
+  (:use [test.tree.builder :only [data-driven before-all after-all before-each after-each tmap]]))
 
 (defn split-opts [args]
   "split a list at the first item that's in an even index (zero based)
@@ -85,6 +85,22 @@
                group)
     group))
 
+(defn insert-group-name [tree groupname]
+  (tmap (fn [test]
+          (update-in test [:groups]
+                     (fn [grps] (if grps (conj grps groupname)
+                                   [groupname]))))
+        tree))
+
+(defn defgroup* [forms groupname opts]
+  (-> forms
+     normalize
+     (add-group-setup groupname (:group-setup opts) (:blockers opts))
+     (add-test-setup (:test-setup opts))
+     (add-test-teardown (:test-teardown opts))
+     (add-group-teardown groupname (:group-teardown opts))
+     (insert-group-name groupname)))
+
 (defmacro defgroup
   "Defines a group of tests as a normal var, named sym. Inside the
    form should be a optional pairs of keywords and their values,
@@ -107,27 +123,25 @@
         opts (apply hash-map opts)
         groupname (str sym)]
     `(def ^:dynamic ~sym
-       (-> ~(vec forms)
-          normalize
-          (add-group-setup ~groupname ~(:group-setup opts) ~(:blockers opts))
-          (add-test-setup ~(:test-setup opts))
-          (add-test-teardown ~(:test-teardown opts))
-          (add-group-teardown ~groupname ~(:group-teardown opts)) ;;do last because we don't want to
-          ;; alter tests after we've set up a wait for them.
-          ))))
+       (defgroup* ~(vec forms) ~groupname ~opts))))
 
-(comment (def mytest
-           (defgroup xyz
-             :test-setup (fn [] (println "pre-test thing"))
-             :group-setup (fn [] (println "configuring the whole group"))
-             :group-teardown (fn [] (println "cleaning up group!"))
-             :test-teardown (fn [] (println "cleanin up test"))
+(comment (defgroup abc
+           (deftest "blargh"
+             (+ 0 0)))
+         
+         (defgroup xyz
+           :test-setup (fn [] (println "pre-test thing"))
+           :group-setup (fn [] (println "configuring the whole group"))
+           :group-teardown (fn [] (println "cleaning up group!"))
+           :test-teardown (fn [] (println "cleanin up test"))
            
-             (deftest "asdf"
-               (+ 1 1))
+           (deftest "asdf"
+             (+ 1 1))
 
-             (deftest "zyz"
-               (- 2 1))
+           (deftest "zyz"
+             (- 2 1))
 
-             (deftest "bar"
-               (/ 5 2)))))
+           (deftest "bar"
+             (/ 5 2))
+
+           abc))
