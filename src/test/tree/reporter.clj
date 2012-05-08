@@ -186,8 +186,8 @@
                            :finished-at (date-format (System/currentTimeMillis))} ;;need real values here
                     (for [[clazz methods] grouped-by-class]
                       [:class {:name (apply str (interpose "."
-                                                           (concat (reverse (:groups (first methods)))
-                                                                   [clazz])))}
+                                                           (or (reverse (:groups (first methods)))
+                                                               ["rootClass"])))}
                        (for [method methods]
                          (let [tr (:report (@reports method))]
                            [:test-method (info method tr)
