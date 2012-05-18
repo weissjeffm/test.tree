@@ -159,10 +159,6 @@
                  to just run the tests without blocking, use run-allp."
   [tree]
   @(run-allp tree)
-  (redir [*out* (java.io.FileWriter. "junitreport.xml")]
-    (junit-report))
-  (redir [*out* (java.io.FileWriter. "testng-report.xml")]
-    (testng-report))
   (spit "report.clj"
         (with-out-str
           (binding [pprint/*print-right-margin* 120
@@ -173,6 +169,11 @@
                                          (keys @reports)
                                          (for [v (vals @reports)]
                                            (dissoc v :promise :status))))))))
+  (redir [*out* (java.io.FileWriter. "testng-report.xml")]
+         (testng-report))
+  (redir [*out* (java.io.FileWriter. "junitreport.xml")]
+         (junit-report))
+
   @reports)
 
 
