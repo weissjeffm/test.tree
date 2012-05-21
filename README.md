@@ -7,7 +7,9 @@ It fulfills the same purpose as [TestNG](http://testng.org),
 dependencies, allows flexible grouping and ordering of tests, and
 creates reports.
 
-## Philosophy Automated testing is programming.
+## Philosophy
+
+Automated testing is programming.
 
 Test.tree's design goal is to be a simple library, not an application
 to whom you must hand over full control. It is written in Clojure
@@ -15,16 +17,19 @@ because it makes no distinction between data and code (what are
 automated test procedures, data or code? I don't know). It has a
 minimalist design that uses nothing but basic types - functions,
 lists, and maps. It provides the pieces, and you put them together
-however you want. ** Sampling of supported scenarios:
-    * Run many tests in parallel
-    * Generate data-driven tests
-    * Select, filter, and group tests by name, tag, or your own
+however you want. 
+
+## Sampling of supported scenarios:
+
+* Run many tests in parallel
+* Generate data-driven tests
+* Select, filter, and group tests by name, tag, or your own
        custom function.
-    * Apply setup/teardown procedures to any selected tests.
-    * Produce junit format xml reports.
-    * Use test pre-conditions - skip tests if the precondition fails
-    * Get callbacks when tests start/end/pass/fail/skip
-    * Control depth of testing
+* Apply setup/teardown procedures to any selected tests.
+* Produce junit format xml reports.
+* Use test pre-conditions - skip tests if the precondition fails
+* Get callbacks when tests start/end/pass/fail/skip
+* Control depth of testing
 
 ## How do I use it? 
 
