@@ -13,6 +13,7 @@
 
 (def q (atom nil))
 (def done (atom nil))
+(def threads (atom nil))
 
 (defn execute "Executes test, returns either :pass if the test exits
                normally, or exception the test threw."
@@ -87,6 +88,10 @@
   (doseq [child-test (child-locs z)]
     (queue child-test)))
 
+(defn live? "is the thread alive (not terminated?)"
+  [t]
+  (not= Thread$State/TERMINATED (.getState t)))
+
 (defn consume "Starts polling the test queue, takes tests from the
                queue and executes them one at a time."
   []
@@ -109,6 +114,16 @@
       (.offer @q (fn [] (run-test z blockers)))
       (dosync
        (alter reports assoc-in [(-> z zip/node plain-node) :status] :queued)))))
+
+(defn state
+  "If some threads are still live and some promises
+   not yet delivered, tests are still running."
+  []
+  (let [living-threads (some live? @threads)
+        unrun-tests (some (complement realized?) (map :promise (vals @reports)))]
+    (cond (and living-threads unrun-tests) :running
+          (not unrun-tests) :finished
+          :else :deadlocked)))
 
 (defn run-allp "Runs all tests in the tree, in parallel (if threads
                 are set >1).  Returns a future object that when
@@ -133,17 +148,19 @@
       (add-watch reports k v))
     
     (let [end-wait (future ;;; when all reports are done, raise 'done' flag
-                           ;;; and do teardown
-                     (doseq [v (vals @reports)]
-                       (-> v :promise deref))
+;;; and do teardown
+                     (while (= (state) :running)
+                       (Thread/sleep 500))
                      (reset! done true) 
                      (teardown)
                      @reports)]
       (setup)
-      (doseq [agentnum (range numthreads)]
-        (.start (Thread. (-> consume
-                            thread-runner)
-                         (str "test.tree-thread" agentnum))))
+      (reset! threads (for [threadnum (range numthreads)]
+                        (Thread. (-> consume
+                                    thread-runner)
+                                 (str "test.tree-thread" threadnum))))
+      (doseq [t @threads]
+        (.start t))
       (queue z)
       end-wait)))
 
@@ -158,7 +175,13 @@
                  clojure data file with all the results.  If you want
                  to just run the tests without blocking, use run-allp."
   [tree]
-  @(run-allp tree)
+  (run-allp tree)
+  (loop [s (state)]
+    (case s
+      :finished nil
+      :deadlocked (throw (RuntimeException. "All threads died with tests still in the queue! aborting."))
+      :running (Thread/sleep 200))
+    (recur (state)))
   (spit "report.clj"
         (with-out-str
           (binding [pprint/*print-right-margin* 120
