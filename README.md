@@ -120,7 +120,7 @@ of tests.
 ### Optional keys
 
 Options be placed inside deftest or defgroup, after the name. 
-```
+```Lisp
 (deftest "my test"
    :blockers     (constantly ["this test is currently disabled"])
    :description  "Runs foobar widget tests."
@@ -137,7 +137,7 @@ Options be placed inside deftest or defgroup, after the name.
   this function should take a variable number of args but again
   can safely ignore the args (in clojure an ignored argument is
   usually named _ by convention).
-```
+```Lisp
 (defgroup calc-division-tests
    :test-setup (fn [& _] (calc.test/clear-display))
    
@@ -160,7 +160,7 @@ Options be placed inside deftest or defgroup, after the name.
   function will receive one argument, it's safe for the function
   to ignore the argument. It's used by some built-in callback
   functions that are provided in test.tree. 
-```
+```Lisp
 (deftest "my test"
    :blockers (fn [_] (my.bugtracker.client/is-bug-still-open? "bug654321"))
    
@@ -191,7 +191,7 @@ These are configuration options for the entire suite, all optional.
   argument function is what kicks off running the tests on this
   thread.
 
-```
+```Lisp
 (def tests-to-run 
   (with-meta all-calc-tests
     {:thread-runner (fn [run-tests] 
