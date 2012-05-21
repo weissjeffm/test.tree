@@ -138,7 +138,10 @@
       (add-child-fn n)
       zip/root)))
 
-(defn after-all [t n]
+(defn after-all
+  "Takes a tree of tests n, and creates a new tree where
+   test t runs after all the tests in n."
+  [t n]
   (-> n
      test-zip
      (zip/append-child (assoc t :blockers (wait-for-tree n)))
