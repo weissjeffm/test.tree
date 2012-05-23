@@ -170,6 +170,7 @@
       (teardown)
       @reports)))
 
+
 (defmacro redir [[v stream] & body]
   `(binding [~v ~stream]
      (try ~@body
@@ -188,6 +189,7 @@
       :deadlocked (throw (RuntimeException. "All threads died with tests still in the queue! aborting."))
       :running (do (Thread/sleep 200)
                    (recur (state)))))
+
   (spit "report.clj"
         (with-out-str
           (binding [pprint/*print-right-margin* 120
