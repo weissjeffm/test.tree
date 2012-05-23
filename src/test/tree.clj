@@ -163,7 +163,9 @@
         (with-out-str
           (binding [pprint/*print-right-margin* 120
                     pprint/*print-suppress-namespaces* true
-                    pprint/*print-miser-width* 80]
+                    pprint/*print-miser-width* 80
+                    *print-length* nil
+                    *print-level* nil]
             (pprint/pprint (sort-by (fn [item] (-> item :report :start-time))
                                     (map merge
                                          (keys @reports)
