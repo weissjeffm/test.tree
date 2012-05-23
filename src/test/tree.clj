@@ -146,23 +146,29 @@
     ;;watch reports
     (doseq [[k v] watchers]
       (add-watch reports k v))
-    
-    (let [end-wait (future ;;; when all reports are done, raise 'done' flag
-;;; and do teardown
-                     (while (= (state) :running)
-                       (Thread/sleep 500))
-                     (reset! done true) 
-                     (teardown)
-                     @reports)]
-      (setup)
-      (reset! threads (for [threadnum (range numthreads)]
-                        (Thread. (-> consume
-                                    thread-runner)
-                                 (str "test.tree-thread" threadnum))))
-      (doseq [t @threads]
-        (.start t))
-      (queue z)
-      end-wait)))
+
+    ;;do setup
+    (setup)
+
+    ;;start threads
+    (reset! threads (for [threadnum (range numthreads)]
+                      (Thread. (-> consume
+                                  thread-runner)
+                               (str "test.tree-thread" threadnum))))
+    (doseq [t @threads]
+      (.start t))
+
+    ;;put first tests on the queue
+    (queue z)
+
+    ;; return a future that will raise 'done' flag, do
+    ;; teardown and return the reports
+    (future 
+      (while (= (state) :running)
+        (Thread/sleep 500))
+      (reset! done true) 
+      (teardown)
+      @reports)))
 
 (defmacro redir [[v stream] & body]
   `(binding [~v ~stream]
@@ -180,8 +186,8 @@
     (case s
       :finished nil
       :deadlocked (throw (RuntimeException. "All threads died with tests still in the queue! aborting."))
-      :running (Thread/sleep 200))
-    (recur (state)))
+      :running (do (Thread/sleep 200)
+                   (recur (state)))))
   (spit "report.clj"
         (with-out-str
           (binding [pprint/*print-right-margin* 120
