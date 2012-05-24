@@ -27,6 +27,8 @@
 (defn stdout-log-watcher [k r o n]
   (let [[_ d _] (data/diff o n)]
     (doseq [[{:keys [name parameters]} {:keys [status report]}] d]
-      (let [parms-str (if parameters (pr-str parameters) "")]
+      (let [parms-str (if parameters (pr-str parameters) "")
+            blocked-by (:blocked-by report)
+            bb-str (if blocked-by (str "Blockers: " (pr-str blocked-by)) "")]
         (if (= status :done)
-          (println (apply format "%-12s %s %s\n" (map str [(:result report) name parms-str]))))))))
+          (println (apply format "%-12s %s %s   %s\n" (map str [(:result report) name parms-str bb-str]))))))))
