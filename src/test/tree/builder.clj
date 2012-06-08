@@ -75,15 +75,24 @@
   (fn [z]
     (filter pred (-> z zip/root test-zip nodes))))
 
-(defn combine "combines two thunks into one, using juxt, and combine
-               the serialized fn metadata, if it's present."
-  [f g]
+(defn combine-with
+  "combines two thunks into one, using given combinator-fn, and combine
+   the serialized fn metadata, if it's present."
+  [combinator-fn f g]
   (let [[sf sg] (for [i [f g]] (-> (meta i) ::source))]
-    (with-meta (juxt f g)
+    (with-meta (combinator-fn f g)
       (merge (meta f) (meta g)
              (if (and sf sg)
                {::source (concat sf (drop 2 sg))}
                {})))))
+
+(def ^{:doc "combine two functions using juxt"}
+  combine
+  (partial combine-with juxt))
+
+(def ^{:doc "combine two thunks with try/finally (where the f is the try and g is the finally."}
+  combine-finally 
+  (partial combine-with (fn [f g] (try (f) (finally (g))))))
 
 (defn union
   "Takes the given functions and returns a new function. When that
@@ -105,9 +114,9 @@
   (let [s (:steps n)]
     (assoc n :steps (combine f s))))
 
-(defn after-test "Run f after the steps of test node n" [f n]
+(defn after-test "Run f in a finally block, after the steps of test node n" [f n]
   (let [s (:steps n)]
-    (assoc n :steps (combine s f))))
+    (assoc n :steps (combine-finally s f))))
 
 (defn run-before "Run f before every test that matches pred"
   [pred f tree]

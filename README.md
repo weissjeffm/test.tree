@@ -149,8 +149,9 @@ Options be placed inside deftest or defgroup, after the name.
    (deftest ... )
    (deftest ... ) ... )  
 ```
-* *:test-teardown* - defgroup only.  Same as test-setup, but runs
-  *after* each and every test.
+* *:test-teardown* - defgroup only. Same as test-setup, but runs
+  *after* each and every test, and the teardown will always be run,
+  even if the test fails.
 * *:blockers* - A callback function to determine at runtime if
   this test should be skipped before it's attempted. If you have a
   test that's been failing every run and there's nothing further
