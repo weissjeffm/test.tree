@@ -186,9 +186,16 @@ Options be placed inside deftest or defgroup, after the name.
 ### Metadata keys
 
 These are configuration options for the entire suite, all optional.
-* *:threads* The number of concurrent threads that will run
-  tests - no more than this number of tests will be run
-  simultaneously.
+
+* *:setup* A no-arg function to be called when starting the suite.
+   It's called before any of the worker threads are created.
+
+* *:teardown* A no-arg function to be called after the suite is
+   complete. It's called after all the worker threads have finished.
+
+* *:threads* The number of concurrent threads that will run tests - no
+  more than this number of tests will be run simultaneously.
+
 * *:thread-runner* (Advanced) If each thread needs to do some
   setup and teardown (example, opening a browser when it starts,
   and closing it when it ends), specify it here. It's a 1-arg
