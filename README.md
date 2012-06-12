@@ -204,6 +204,15 @@ These are configuration options for the entire suite, all optional.
   argument function is what kicks off running the tests on this
   thread.
 
+* *:watchers* A watcher is a callback function that receives events,
+   such as the start of a test, a failed test, etc.It uses clojure's
+   built-in
+   [watch](http://clojure.github.com/clojure/clojure.core-api.html#clojure.core/add-watch)
+   functionality. See test.tree.watcher namespace for some functions
+   that help create watchers.  The *:watchers* value should be a map,
+   where the keys are the names of the watchers, and the values are
+   watch functions like you'd pass to *add-watch*.
+
 ```Lisp
 (def tests-to-run 
   (with-meta all-calc-tests
