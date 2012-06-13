@@ -5,14 +5,10 @@
         [clojure.core.incubator :only [-?>]]
         test.tree.zip
         [test.tree.builder :only [realize]]
-        [test.tree.reporter :only [passed? reports init-reports junit-report testng-report]])
-  
+        [test.tree.reporter :only [passed? *reports* init-reports junit-report testng-report]])
+
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
-
-
-(def q (atom nil))
-(def done (atom nil))
 
 (defn execute "Executes test, returns either :pass if the test exits
                normally, or exception the test threw."
@@ -27,7 +23,7 @@
   (fn [{:keys [steps parameters] :as test}]
     (if parameters
       (let [realized-params (realize parameters)]
-        (-> test 
+        (-> test
            (assoc :steps (with-meta (fn [] (apply steps realized-params))
                            (meta steps)))
            runner
@@ -64,17 +60,16 @@
                       test (since each node only has one parent, it
                       will either be empty or have 1 item, the parent
                       test)"
-  [z]
-  (let [parent (-?> z zip/up zip/node plain-node)]
+  [test-tree-zip]
+  (let [parent (-?> test-tree-zip zip/up zip/node plain-node)]
     (if (and parent (not (passed? parent)))
       [parent]
       [])))
 
-(declare queue)
-
-(defn run-test [z blockers]
-  (let [this-test (-> z zip/node plain-node)]
-    (try (let [all-blockers (concat blockers (parent-blocker z)) 
+(defn run-test [test-tree-zip testrun-queue reports blockers]
+  (let [this-test (-> test-tree-zip zip/node plain-node)]
+    (try (let [all-blockers (concat blockers (binding [*reports* reports]
+                                               (parent-blocker test-tree-zip)))
                report (runner (assoc this-test :blocked-by all-blockers))]
            (dosync
             (alter reports update-in [this-test]
@@ -84,68 +79,89 @@
          (catch Exception e
            (deliver (:promise (@reports this-test)) e)
            (println "report delivered with error: "  (:name this-test) ": " e))))
-  (doseq [child-test (child-locs z)]
-    (queue child-test)))
+  (doseq [child-test (child-locs test-tree-zip)]
+    (queue child-test testrun-queue reports)))
 
 (defn consume "Starts polling the test queue, takes tests from the
                queue and executes them one at a time."
-  []
-  (while (and @q (not (and @done (.isEmpty @q))))
-    (if-let [next-item (.poll @q (long 100) TimeUnit/MILLISECONDS)]
+  [q testrun-state]
+  (while (not= @testrun-state :finished)
+    (if-let [next-item (.poll q (long 250) TimeUnit/MILLISECONDS)]
       (next-item)))
-  (if-not @q (println "queue reset, thread exiting.")
-          (println "thread done.")))
+  (println "thread done."))
 
 (defn queue "In a future, waits for the calculation of blockers for
              the current test, and puts it on the queue.  Even if the
              test turns out to be blocked, it won't be marked skipped
              until it is consumed."
-  [z]
+  [test-tree-zip testrun-queue reports]
   (future
-    (let [blockers (try (doall ((or (-> z zip/node :blockers)
-                                    (constantly [])) ;;default blocker fn returns empty list
-                                z))
-                        (catch Exception e [e]))]  
-      (.offer @q (fn [] (run-test z blockers)))
+    (let [blockers (try (binding [*reports* reports]
+                          (doall ((or (-> test-tree-zip zip/node :blockers)
+                                      (constantly [])) ;;default blocker fn returns empty list
+                                  test-tree-zip)))
+                        (catch Exception e [e]))]
+      (.offer testrun-queue (fn [] (run-test test-tree-zip testrun-queue reports blockers)))
       (dosync
-       (alter reports assoc-in [(-> z zip/node plain-node) :status] :queued)))))
+       (alter reports assoc-in [(-> test-tree-zip zip/node plain-node) :status] :queued)))))
 
-(defn run-allp "Runs all tests in the tree, in parallel (if threads
-                are set >1).  Returns a future object that when
-                deref'd will block until all tests are done, and
-                return reports data."
-  [tree]
+(defn live? "is the thread alive (not terminated?)"
+  [t]
+  (not= Thread$State/TERMINATED (.getState t)))
+
+(defn state
+  "If some threads are still live and some promises
+   not yet delivered, tests are still running."
+  [threads reports]
+  (let [living-threads (some live? threads)
+        unrun-tests (some (complement realized?) (map :promise (vals @reports)))]
+    (cond (and living-threads unrun-tests) :running
+          (not unrun-tests) :finished
+          :else :deadlocked)))
+
+(defn wait-for-all-test-results [threads reports]
+ (loop [s (state threads reports)]
+    (case s
+      :finished nil
+      :deadlocked (throw (RuntimeException. "All threads died with tests still in the queue! aborting."))
+      :running (do (Thread/sleep 200)
+                   (recur (state threads reports)))))) 
+(defn run
+  "Runs all tests in the tree, in parallel (if threads are set >1).
+  Returns a future object that when deref'd will block until all tests
+  are done, and return reports data."
+  [tree & [testrun-name]]
   (let [thread-runner (or (-> tree meta :thread-runner) identity)
         setup (or (-> tree meta :setup) (constantly nil))
         teardown (or (-> tree meta :teardown) (constantly nil))
         numthreads (or (-> tree meta :threads) 1)
+        testrun-queue (LinkedBlockingQueue.)
+        testrun-state (atom :not-started)
+        threads (for [agentnum (range numthreads)]
+                  (Thread. (-> (partial consume testrun-queue testrun-state)
+                              thread-runner)
+                           (str "test.tree-thread" agentnum)))
         watchers (or (-> tree meta :watchers) {})
-        z (test-zip tree)] 
-    
-    (reset! q (LinkedBlockingQueue.))
-    (reset! done false)
+        test-tree-zip (test-zip tree)
+        reports (init-reports test-tree-zip)]
 
-    ;;initialize reports
-    (init-reports z)
+    ;;start worker threads
+    (doseq [thread threads] (.start thread))
     
     ;;watch reports
     (doseq [[k v] watchers]
       (add-watch reports k v))
-    
-    (let [end-wait (future ;;; when all reports are done, raise 'done' flag
-                           ;;; and do teardown
-                     (doseq [v (vals @reports)]
-                       (-> v :promise deref))
-                     (reset! done true) 
+
+    (let [end-wait (future ;when all reports are done, raise 'done' flag
+                           ;and do teardown
+                     (while (= (state threads reports) :running)
+                       (Thread/sleep 250)) 
                      (teardown)
-                     @reports)]
+                     reports)]
       (setup)
-      (doseq [agentnum (range numthreads)]
-        (.start (Thread. (-> consume
-                            thread-runner)
-                         (str "test.tree-thread" agentnum))))
-      (queue z)
-      end-wait)))
+
+      (queue test-tree-zip testrun-queue reports)
+      [threads reports])))
 
 (defmacro redir [[v stream] & body]
   `(binding [~v ~stream]
@@ -157,25 +173,25 @@
                  junit report file to the current directory, and a
                  clojure data file with all the results.  If you want
                  to just run the tests without blocking, use run-allp."
-  [tree]
-  @(run-allp tree)
-  (spit "report.clj"
-        (with-out-str
-          (binding [pprint/*print-right-margin* 120
-                    pprint/*print-suppress-namespaces* true
-                    pprint/*print-miser-width* 80
-                    *print-length* nil
-                    *print-level* nil]
-            (pprint/pprint (sort-by (fn [item] (-> item :report :start-time))
-                                    (map merge
-                                         (keys @reports)
-                                         (for [v (vals @reports)]
-                                           (dissoc v :promise :status))))))))
-  (redir [*out* (java.io.FileWriter. "testng-report.xml")]
-         (testng-report))
-  (redir [*out* (java.io.FileWriter. "junitreport.xml")]
-         (junit-report))
+  [tree & [testrun-name]]
+  (let [[threads reports] (run tree testrun-name)]
+    (wait-for-all-test-results threads reports)
+    (spit "report.clj"
+          (with-out-str
+            (binding [pprint/*print-right-margin* 120
+                      pprint/*print-suppress-namespaces* true
+                      pprint/*print-miser-width* 80
+                      *print-length* nil
+                      *print-level* nil]
+              (pprint/pprint (sort-by (fn [item] (-> item :report :start-time))
+                                      (map merge
+                                           (keys @reports)
+                                           (for [v (vals @reports)]
+                                             (dissoc v :promise :status))))))))
+    (binding [*reports* reports]
+      (redir [*out* (java.io.FileWriter. "testng-report.xml")]
+             (testng-report))
+      (redir [*out* (java.io.FileWriter. "junitreport.xml")]
+             (junit-report)))
 
-  @reports)
-
-
+    @reports))

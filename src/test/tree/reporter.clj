@@ -4,13 +4,14 @@
         [test.tree.zip :only [nodes]]
         [clj-stacktrace.repl :only [pst-str]]))
 
-(declare reports)
+(def ^:dynamic *reports* nil) ;meant to be rebound by threads running particular
+                    ;suites - each thread won't necessarily be running
+                    ;the same suite or using the same reports
+                    
 (defn init-reports [z]
-  (def ^:dynamic reports (ref {}))
-  (dosync
-     (ref-set reports (zipmap (nodes z)
-                              (repeatedly (fn [] {:status :waiting
-                                                 :promise (promise)}))))))
+  (ref (zipmap (nodes z)
+               (repeatedly (fn [] {:status :waiting
+                                  :promise (promise)})))))
 
 (defmulti exception :wrapper)
 (defmethod exception nil [e] (:object e))
@@ -19,8 +20,8 @@
 (defn report [test]
   ;;need to deref the reports both before and after the promise is
   ;;delivered, otherwise the report doesn't have the result yet.
-  (deref (:promise (@reports test)))
-  (:report (@reports test)))  
+  (deref (:promise (@*reports* test)))
+  (:report (@*reports* test)))  
 
 (defn blocked-by [test]
   (-> test report :blocked-by))
@@ -46,17 +47,17 @@
 (defn skipped-tests []
   (filter (fn [t] (and (not (configuration? t))
                       (skipped? t)))
-          (keys @reports)))
+          (keys @*reports*)))
 
 (defn passed-tests []
   (filter (fn [t] (and (not (configuration? t))
-                            (= (result t) :pass))) (keys @reports)))
+                            (= (result t) :pass))) (keys @*reports*)))
 
 (defn failed? [t]
   (= (result t) :fail))
 
 (defn failed-tests []
-  (filter failed? (keys @reports)))
+  (filter failed? (keys @*reports*)))
 
 (defn execution-time [test]
   (let [r (report test)
@@ -67,11 +68,12 @@
       0)))
 
 (defn total-time []
-  (reduce + (map execution-time (keys @reports))))
+  (reduce + (map execution-time (keys @*reports*))))
 
 
 (defn blocker-report []
-  (->> reports
+  (->> *reports*
+     deref
      vals
      (mapcat #(get-in % [:report :blocked-by]))
      (filter #(not (nil? %)))
@@ -156,7 +158,7 @@
         passes (passed-tests)
         [numfail numskip numpass] (map count [fails skips passes])
         total (+ numfail numskip numpass)
-        grouped-by-class (group-by :name (keys @reports))
+        grouped-by-class (group-by :name (keys @*reports*))
         to-ms-str #(-> (* % 1000) Math/round str)
         suite-duration-ms (to-ms-str (total-time))
         date-format (fn [unixdate] (.format testng-dateformat (java.util.Date. unixdate)))
@@ -189,7 +191,7 @@
                                                            (or (reverse (:groups (first methods)))
                                                                ["rootClass"])))}
                        (for [method methods]
-                         (let [tr (:report (@reports method))]
+                         (let [tr (:report (@*reports* method))]
                            [:test-method (info method tr)
                             (when (skipped? method)
                               [:exception {:class "Skipped"}
