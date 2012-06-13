@@ -66,6 +66,8 @@
       [parent]
       [])))
 
+(declare queue)
+
 (defn run-test [test-tree-zip testrun-queue reports blockers]
   (let [this-test (-> test-tree-zip zip/node plain-node)]
     (try (let [all-blockers (concat blockers (binding [*reports* reports]
@@ -155,7 +157,10 @@
     (let [end-wait (future ;when all reports are done, raise 'done' flag
                            ;and do teardown
                      (while (= (state threads reports) :running)
-                       (Thread/sleep 250)) 
+                       (Thread/sleep 250))
+                     ;signal the threads to stop waiting for new
+                     ;tests
+                     (reset! testrun-state :finished)
                      (teardown)
                      reports)]
       (setup)
