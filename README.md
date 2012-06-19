@@ -26,7 +26,7 @@ however you want.
 * Select, filter, and group tests by name, tag, or your own
        custom function.
 * Apply setup/teardown procedures to any selected tests.
-* Produce junit format xml reports.
+* Produce junit and TestNG format xml reports.
 * Use test pre-conditions - skip tests if the precondition fails
 * Get callbacks when tests start/end/pass/fail/skip
 * Control depth of testing
@@ -45,6 +45,7 @@ has some important consequences:
   numbers would probably be at the root. If that fails, nothing else
   can be tested. A test that adds 2 numbers could be a child, a test
   that adds ten numbers could be a grandchild node.
+  
 * Each test should be *atomic* in terms of what it does to the
   [SUT](http://en.wikipedia.org/wiki/System_under_test). This is a
   best practice in *any* automated test suite, but it's required for
@@ -75,6 +76,7 @@ value. To do data driven testing, you just create a bunch of rows of
 of numbers to add, and the expected sum, because.
 
 ## Example test suite program
+
 ```Lisp
 (require 'calc.test)
 (use 'test.tree.script)
@@ -106,8 +108,9 @@ of numbers to add, and the expected sum, because.
  (test.tree/run-suite simple-calc-tests))
 ```
 
-Note that defgroup created a var called *simple-calc-tests*, that is
-later used to tell run-suite what tests to run. You can also refer to
+Note that defgroup created a var called *simple-calc-tests*, which you
+can use just like any other Clojure var.  For example, the *run-suite*
+function will accept this as an argument.  You can also refer to
 a group's var within another defgroup, to build up a larger structure
 of tests.
 
@@ -125,6 +128,7 @@ of tests.
 ### Optional keys
 
 Options be placed inside deftest or defgroup, after the name. 
+
 ```Lisp
 (deftest "my test"
    :blockers     (constantly ["this test is currently disabled"])
@@ -135,13 +139,20 @@ Options be placed inside deftest or defgroup, after the name.
 ```       
 * *:group-setup* - defgroup only.  Before any test in the group is
   run, run the given no-arg function.  
+  
 * *:group-teardown* - defgroup only.  After all the tests in the
   group have been run (or skipped), run the given no-arg function.
+  
 * *:test-setup* - defgroup only. Before each and every test in the
   group, run this function.  Note
   this function should take a variable number of args but again
   can safely ignore the args (in clojure an ignored argument is
   usually named _ by convention).
+  
+* *:test-teardown* - defgroup only.  After each and every test in the
+   group, run this function.  Note the arguments (see *:test-setup*
+   above).  Also note that *:test-teardown* will run even if the test fails.
+
 ```Lisp
 (defgroup calc-division-tests
    :test-setup (fn [& _] (calc.test/clear-display))
@@ -149,6 +160,7 @@ Options be placed inside deftest or defgroup, after the name.
    (deftest ... )
    (deftest ... ) ... )  
 ```
+
 * *:test-teardown* - defgroup only. Same as test-setup, but runs
   *after* each and every test, and the teardown will always be run,
   even if the test fails.
@@ -166,6 +178,7 @@ Options be placed inside deftest or defgroup, after the name.
   function will receive one argument, it's safe for the function
   to ignore the argument. It's used by some built-in callback
   functions that are provided in test.tree. 
+
 ```Lisp
 (deftest "my test"
    :blockers (fn [_] (my.bugtracker.client/is-bug-still-open? "bug654321"))
@@ -196,14 +209,6 @@ These are configuration options for the entire suite, all optional.
 * *:threads* The number of concurrent threads that will run tests - no
   more than this number of tests will be run simultaneously.
 
-* *:thread-runner* (Advanced) If each thread needs to do some
-  setup and teardown (example, opening a browser when it starts,
-  and closing it when it ends), specify it here. It's a 1-arg
-  function where the body does setup, calls its argument as a
-  no-arg function, and then does any teardown. Calling the
-  argument function is what kicks off running the tests on this
-  thread.
-
 * *:watchers* A watcher is a callback function that receives events,
    such as the start of a test, a failed test, etc.It uses clojure's
    built-in
@@ -212,6 +217,15 @@ These are configuration options for the entire suite, all optional.
    that help create watchers.  The *:watchers* value should be a map,
    where the keys are the names of the watchers, and the values are
    watch functions like you'd pass to *add-watch*.
+
+* *:thread-runner* (Advanced) If each thread needs to do some
+  setup and teardown (example, opening a browser when it starts,
+  and closing it when it ends), specify it here. It's a 1-arg
+  function where the body does setup, calls its argument as a
+  no-arg function, and then does any teardown. Calling the
+  argument function is what kicks off running the tests on this
+  thread.
+
 
 ```Lisp
 (def tests-to-run 
