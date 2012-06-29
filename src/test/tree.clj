@@ -4,27 +4,30 @@
   (:use slingshot.slingshot
         [clojure.core.incubator :only [-?>]]
         test.tree.zip
-        [test.tree.builder :only [realize]]
+        [test.tree.builder :only [realize make-data-driven-test]]
         [test.tree.reporter :only [passed? *reports* init-reports junit-report testng-report]])
 
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
+
 (defn execute "Executes test, returns either :pass if the test exits
                normally, or exception the test threw."
   [test]
-  (try+ {:returned ((:steps test))      ;test fn is called here
+  (try+ {:returned (eval (:steps test))      ;test code is called here
          :result :pass}
         (catch Object _ {:result :fail
                          :error &throw-context})))
 
 
 (defn wrap-data-driven [runner]
-  (fn [{:keys [steps parameters] :as test}]
+  (fn [{:keys [steps parameters param-names] :as test}]
     (if parameters
-      (let [realized-params (realize parameters)]
+      (let [realized-params (eval parameters)]
         (-> test
-           (assoc :steps (with-meta (fn [] (apply steps realized-params))
+           (assoc :steps (with-meta (make-data-driven-test steps
+                                                           param-names
+                                                           parameters)
                            (meta steps)))
            runner
            (assoc :parameters realized-params)))

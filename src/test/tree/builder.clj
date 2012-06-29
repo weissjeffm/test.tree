@@ -1,5 +1,7 @@
 (ns test.tree.builder
-  (:require [clojure.zip :as zip])
+  (:require [clojure.zip :as zip]
+            [clojure.walk :as walk]
+            [clojure.string :as str])
   (:use [serializable.fn :only [fn]]
         [test.tree.reporter :only [result passed?]]
         test.tree.zip)
@@ -40,17 +42,24 @@
   (tmap (fn [n] ((if (pred n) f identity) n))
         tree))
 
+(defn bare-symbol [sym] (-> sym str (str/split #"/") second symbol))
+
+(defn make-data-driven-test [code param-names params]
+  (let [bare-names (map bare-symbol param-names)]
+    `(let ~(vec (interleave bare-names params))
+       ~(walk/postwalk-replace (zipmap params bare-names) code))))
+
 (defn data-driven "Generate a set of n data-driven tests. The first
                    argument is a template test whose :steps function
                    takes p arguments. The second argument is a n by p
                    coll of colls containing the data for the tests.
                    The metadata both the whole dataset and each row
                    will be preserved."
-  [test data]
+  [test param-names data]
   (vec (for [item data]
          (->  test
              (merge (meta data) (meta item))
-             (assoc :parameters (if (coll? item) (vec item) item))))))
+             (assoc :parameters item :param-names param-names)))))
 
 (defn lazy-literal-seq [coll]
   (reduce (fn [orig form] `(lazy-seq (cons ~form ~orig))) nil (reverse coll)))

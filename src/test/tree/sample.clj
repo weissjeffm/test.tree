@@ -20,10 +20,11 @@
                                         :steps (fn [] (Thread/sleep 400) (println "frob renamed"))
                                         :more (builder/data-driven {:name "indivis by 5"
                                                                     :steps
-                                                                    (fn [n] (-> n
-                                                                              (mod 5)
-                                                                              (= 0)
-                                                                              (when (throw+ (:type :divisibility :msg "Divisible by 5! Oh noes!")))))} [[1] [20]  (with-meta (fn [] [7]) {:blockers (fn [_] [:blocker1])})])}
+                                                                    `(-> n
+                                                                       (mod 5)
+                                                                       (= 0)
+                                                                       (when (throw+ (:type :divisibility :msg "Divisible by 5! Oh noes!"))))}
+                                                                   [[n] [1] [20]  (with-meta [7] {:blockers (fn [_] [:blocker1])})])}
                                        {:name "delete a frob"
                                         :steps (fn [] (Thread/sleep 400)
                                                  (throw (Exception. "woops, frob could not be deleted."))
