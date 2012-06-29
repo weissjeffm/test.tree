@@ -5,4 +5,4 @@
                          [weissjeffm/clojure.prxml "1.3.0-SNAPSHOT"]
                          [org.clojars.weissjeffm/serializable-fn "1.2.1-SNAPSHOT"]
                          [clj-stacktrace "0.2.4"]
-                         [slingshot "0.10.1"]])
+                         [slingshot "0.10.3"]])

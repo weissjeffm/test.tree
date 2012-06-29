@@ -4,27 +4,14 @@
             [clojure.string :as str])
   (:use [serializable.fn :only [fn]]
         [test.tree.reporter :only [result passed?]]
-        test.tree.zip)
+        test.tree.zip
+        slingshot.slingshot)
   (:refer-clojure :exclude [fn])
   (:import [java.io File]))
 
 ;;;
 ;;; pre-execution test manipulation functions
 ;;;
-
-(defprotocol Delay
-  (realize [d]))
-
-(extend-protocol Delay
-  clojure.lang.Fn
-  (realize [t] (.call t))
-
-  clojure.lang.Delay
-  (realize [t] (clojure.core/force t))
-
-  java.lang.Object
-  (realize [t] t))
-
 
 (defn tmap "Does a depth-first walk of the tree, passes each node thru
             f, and returns the tree"
@@ -44,22 +31,39 @@
 
 (defn bare-symbol [sym] (-> sym str (str/split #"/") second symbol))
 
-(defn make-data-driven-test [code param-names params]
-  (let [bare-names (map bare-symbol param-names)]
-    `(let ~(vec (interleave bare-names params))
-       ~(walk/postwalk-replace (zipmap params bare-names) code))))
+(defn localize-params
+  "Strip namespace from syntax quoted symbols that will be parameters
+   for data driven test. Then the code can be wrapped in a let with
+   those local vars defined. Also returns the params with namespace
+   stripped."
+  [param-names code]
+  (let [bare-params (map bare-symbol param-names)]
+    [bare-params
+     (walk/postwalk-replace (zipmap param-names
+                                    bare-params)
+                            code)]))
 
-(defn data-driven "Generate a set of n data-driven tests. The first
-                   argument is a template test whose :steps function
-                   takes p arguments. The second argument is a n by p
-                   coll of colls containing the data for the tests.
+(defn data-driven-steps [params bare-names code]
+  `(let ~(vec (interleave bare-names params))
+     ~code))
+
+(defn data-driven "Generate a set of n data-driven tests. 
                    The metadata both the whole dataset and each row
                    will be preserved."
-  [test param-names data]
-  (vec (for [item data]
-         (->  test
-             (merge (meta data) (meta item))
-             (assoc :parameters item :param-names param-names)))))
+  [test data]
+  (vec (let [[param-names & items] data]
+         (for [item items]
+           (let [[bare-params steps] (localize-params param-names (:steps test))]
+             (comment "too soon to run this - a row with metadata would be a false negative."
+                      (when-not (= (count item) (count param-names))
+                        (throw+ {:type ::param-count-mismatch
+                                 :msg "Data driven test must have same number of parameter names as actual parameters."
+                                 :param-names bare-params
+                                 :parameters item})))
+             (->  test
+                 (merge (meta data) (meta item))
+                 (assoc :steps steps
+                        :parameters (map vector bare-params item))))))))
 
 (defn lazy-literal-seq [coll]
   (reduce (fn [orig form] `(lazy-seq (cons ~form ~orig))) nil (reverse coll)))

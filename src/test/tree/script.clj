@@ -30,7 +30,7 @@
   [& coll]
   (vec (for [item coll] `(serializable.fn/fn [] ~item))))
 
-(defmacro deftest
+(defn deftest
   "Defines a test with name testname (a string), optional pairs of
   keywords and their values, and forms that comprise the test
   procedure. Finally, more nested deftest forms can optionally be
@@ -42,14 +42,17 @@
   (let [[options allsteps] (split-opts options+steps)
         optmap (apply hash-map options)
         [steps dependent-tests] (split-deftests allsteps)]
-    (if (:data-driven optmap)
-      (conj (concat (mapcat vec (dissoc optmap :data-driven))
-                    allsteps) testname `deftest-datadriven)
-      (merge `{:name ~testname
-               :steps (serializable.fn/fn [] ~@steps)}
+    (if-let [data (:data-driven optmap)]
+      (let [optmap (dissoc optmap :data-driven)]
+        (data-driven (merge {:name testname
+                             :steps (first steps)}
+                            optmap)
+                     data))
+      (merge {:name testname
+              :steps (first steps)}
              optmap
              (if (not (empty? dependent-tests))
-               {:more `(vec (flatten ~(vec dependent-tests)))} {})))))
+               {:more `(vec (flatten (vec dependent-tests)))} {})))))
 
 (defmacro deftest-datadriven [testname & options+kw+data]
   (let [[options [kw & rows]] (split-opts options+kw+data)
@@ -73,7 +76,7 @@
     group
     (before-all (merge {:name (format "Setup for %s" groupname)
                         :configuration true
-                        :steps (or setup (constantly nil))}
+                        :steps (or setup `nil)}
                        (if blockers {:blockers blockers} {}))
                 group)))
 

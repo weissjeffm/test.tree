@@ -4,7 +4,7 @@
   (:use slingshot.slingshot
         [clojure.core.incubator :only [-?>]]
         test.tree.zip
-        [test.tree.builder :only [realize make-data-driven-test]]
+        [test.tree.builder :only [data-driven-steps]]
         [test.tree.reporter :only [passed? *reports* init-reports junit-report testng-report]])
 
   (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
@@ -23,14 +23,15 @@
 (defn wrap-data-driven [runner]
   (fn [{:keys [steps parameters param-names] :as test}]
     (if parameters
-      (let [realized-params (eval parameters)]
+      (let [realized-params (map eval (map second parameters))
+            param-names (map first parameters)]
         (-> test
-           (assoc :steps (with-meta (make-data-driven-test steps
-                                                           param-names
-                                                           parameters)
+           (assoc :steps (with-meta (data-driven-steps realized-params
+                                                       param-names
+                                                       steps)
                            (meta steps)))
            runner
-           (assoc :parameters realized-params)))
+           (assoc :parameters (map vector param-names realized-params))))
       (runner test))))
 
 (defn wrap-blockers [runner]
