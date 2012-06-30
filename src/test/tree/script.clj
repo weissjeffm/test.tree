@@ -41,18 +41,18 @@
   [testname & options+steps]
   (let [[options allsteps] (split-opts options+steps)
         optmap (apply hash-map options)
-        [steps dependent-tests] (split-deftests allsteps)]
+        [steps & dependent-tests]  allsteps]
     (if-let [data (:data-driven optmap)]
       (let [optmap (dissoc optmap :data-driven)]
         (data-driven (merge {:name testname
-                             :steps (first steps)}
+                             :steps steps}
                             optmap)
                      data))
       (merge {:name testname
-              :steps (first steps)}
+              :steps steps}
              optmap
-             (if (not (empty? dependent-tests))
-               {:more `(vec (flatten (vec dependent-tests)))} {})))))
+             (if-not (empty? dependent-tests)
+               {:more (vec (flatten (vec dependent-tests)))} {})))))
 
 (defmacro deftest-datadriven [testname & options+kw+data]
   (let [[options [kw & rows]] (split-opts options+kw+data)
