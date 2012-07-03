@@ -24,7 +24,7 @@
                                                                      `(-> n
                                                                          (mod 5)
                                                                          (= 0)
-                                                                         (when (throw+ (:type :divisibility :msg "Divisible by 5! Oh noes!"))))}
+                                                                         (when (throw+ {:type :divisibility :msg "Divisible by 5! Oh noes!"})))}
                                                                     `[[n] [1] [20]  (with-meta [7] {:blockers (fn [_] [:blocker1])})])}
                                         {:name "delete a frob"
                                          :steps (fn [] (Thread/sleep 400)
@@ -66,54 +66,73 @@
                                         ;:thread-runner (fn [c] (throw (Exception. "waah")))
                )))
 
+(defgroup sprockets
+  :group-setup `(println "setting up sprockets!")
+  :group-teardown `(println "tearing down sprockets!")
+
+  (deftest "create a sprocket"
+    `(do (Thread/sleep 500)
+         (println (str "sprocket created " myvar )))
+    
+    (deftest "send a sprocket via email"
+      `(do (Thread/sleep 400) (println "sent sprocket")))))
+
 (def sample2 (with-meta (deftest "login"
-                          `(do (Thread/sleep 200) (println "logged in"))
+                          `(do (println "logged in"))
+
                           (deftest "create a widget"
-                            `(do (Thread/sleep 300) (println "widget created") (throw (Exception. "woops"))))
-                          (deftest "create a sprocket"
-                            `(do (Thread/sleep 500) (println (str "sprocket created " myvar )))
-                            (deftest "send a sprocket via email"
-                              `(do (Thread/sleep 400) (println "sent sprocket"))))
+                            `(do (println "widget created")
+                                 (throw (Exception. "woops"))))
+                          
+                          sprockets
+
                           (deftest "create a frob"
-                            `(do (Thread/sleep 400) (println "frob created"))
+                            `(do  (println "frob created"))
+
                             (deftest "rename a frob"
-                              `(do (Thread/sleep 400) (println "frob renamed"))
+                              `(do  (println "frob renamed"))
+
                               (deftest "indivis by 5"
                                 :data-driven `[[n] [1] [20]  ~(with-meta `[7] {:blockers (fn [_] [:blocker1])})]
                                 `(-> n (mod 5)
                                     (= 0)
                                     (when (throw+ (:type :divisibility :msg "Divisible by 5! Oh noes!"))))))
                             (deftest "delete a frob"
-                              `(do (Thread/sleep 400)
-                                   (throw (Exception. "woops, frob could not be deleted."))
+                              `(do (throw (Exception. "woops, frob could not be deleted."))
                                    (println "frob deleted"))
+
                               (deftest "undelete a frob"
-                                `(do (Thread/sleep 200) (println "frob undeleted."))))
+                                `(do  (println "frob undeleted."))))
+
                             (deftest "make sure 2 frobs can't have the same name"
-                              `(do (Thread/sleep 400) (println "2nd frob rejected")))
+                              `(do  (println "2nd frob rejected")))
 
                             (deftest "do that4"
-                              `(do (Thread/sleep 400) (println (str "there2.4 " myvar))))
+                              `(do  (println (str "there2.4 " myvar))))
+
                             (deftest "do that5"
                               :blockers (builder/filter-tests (every-pred (builder/named? ["delete a frob"])
                                                                           (complement reporter/passed?)))
-                              `(do (Thread/sleep 400) (println "there2.5"))
+                              `(do  (println "there2.5"))
+
                               (deftest "do that6"
                                 :blockers (builder/filter-tests (every-pred (builder/named?  ["final"]) (complement reporter/passed?)))
-                                `(do (Thread/sleep 400) (println (str "there2.6 " myvar)))))
+                                `(do  (println (str "there2.6 " myvar)))))
+
                             (deftest "do that7"
                               :blockers (builder/filter-tests (every-pred (builder/named? ["do that2"]) (complement reporter/passed?)))
-                              `(do (Thread/sleep 400) (println "there2.7"))   
+                              `(do  (println "there2.7"))   
+
                               (deftest  "do datadriven"
                                 :data-driven  `[[i] [1] [5] [22] ["hi"] [["a" "b"]]]
                                 `(do
-                                   (Thread/sleep 1000)
-                                   (println "did datadriven " i)))))
+(println "did datadriven " i)))))
                          
                           (deftest "borg4"
-                            `(do (Thread/sleep 500) (println "there4"))
+                            `(do  (println "there4"))
+
                             (deftest "final"
-                              `(do (Thread/sleep 400) (println "there4.1")))))
+                              `(do  (println "there4.1")))))
                {:threads 4
                 :watchers {:stdout watcher/stdout-log-watcher
                            ;; :logs log-watcher
