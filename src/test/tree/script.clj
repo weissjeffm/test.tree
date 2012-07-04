@@ -100,9 +100,13 @@
      normalize
      (add-group-setup groupname (:group-setup opts) (:blockers opts))
      (add-test-setup (:test-setup opts))
+     (insert-group-name groupname) ; need to do this before group
+                                   ; teardown, otherwise test will
+                                   ; gain extra key and won't match the
+                                   ; result map keys
+     
      (add-test-teardown (:test-teardown opts))
-     (add-group-teardown groupname (:group-teardown opts))
-     (insert-group-name groupname)))
+     (add-group-teardown groupname (:group-teardown opts))))
 
 (defmacro defgroup
   "Defines a group of tests as a normal var, named sym. Inside the

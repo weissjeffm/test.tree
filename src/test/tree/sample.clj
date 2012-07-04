@@ -71,11 +71,10 @@
   :group-teardown `(println "tearing down sprockets!")
 
   (deftest "create a sprocket"
-    `(do (Thread/sleep 500)
-         (println (str "sprocket created " myvar )))
+    `(do (println (str "sprocket created " myvar )))
     
     (deftest "send a sprocket via email"
-      `(do (Thread/sleep 400) (println "sent sprocket")))))
+      `(do  (println "sent sprocket")))))
 
 (def sample2 (with-meta (deftest "login"
                           `(do (println "logged in"))
@@ -112,7 +111,7 @@
 
                             (deftest "do that5"
                               :blockers (builder/filter-tests (every-pred (builder/named? ["delete a frob"])
-                                                                          (complement reporter/passed?)))
+                                                                                  (complement reporter/passed?)))
                               `(do  (println "there2.5"))
 
                               (deftest "do that6"
