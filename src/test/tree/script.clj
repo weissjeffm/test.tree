@@ -19,17 +19,6 @@
   (if (map? tests) tests
       (vec (flatten tests))))
 
-(defmacro runtime-data
-  "Creates data for a data driven test, where each row of data will
-  not be evaluated until the test is actually run. This is only useful
-  for when you want each run of the data-driven test to use different
-  data each time. example: (runtime-data [(System/currentTimeMillis)]
-  [(Math/random)]) every time you run your test, each data item will
-  contain a new value. If having test data fixed at compile time is
-  ok, then you can just use plain literals: [ [12345] [0.14159] ]"
-  [& coll]
-  (vec (for [item coll] `(serializable.fn/fn [] ~item))))
-
 (defn deftest
   "Defines a test with name testname (a string), optional pairs of
   keywords and their values, and forms that comprise the test

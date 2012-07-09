@@ -2,8 +2,7 @@
   (:require [clojure.zip :as zip]
             [clojure.walk :as walk]
             [clojure.string :as str])
-  (:use [serializable.fn :only [fn]]
-        [test.tree.reporter :only [result passed?]]
+  (:use [test.tree.reporter :only [result passed?]]
         test.tree.zip
         slingshot.slingshot)
   (:refer-clojure :exclude [fn])
@@ -64,9 +63,6 @@
                  (merge (meta data) (meta item))
                  (assoc :steps steps
                         :parameters (map vector bare-params item))))))))
-
-(defn lazy-literal-seq [coll]
-  (reduce (fn [orig form] `(lazy-seq (cons ~form ~orig))) nil (reverse coll)))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]
