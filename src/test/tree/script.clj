@@ -19,7 +19,7 @@
   (if (map? tests) tests
       (vec (flatten tests))))
 
-(defn deftest
+(defmacro deftest
   "Defines a test with name testname (a string), optional pairs of
   keywords and their values, and forms that comprise the test
   procedure. Finally, more nested deftest forms can optionally be
@@ -30,25 +30,26 @@
   [testname & options+steps]
   (let [[options allsteps] (split-opts options+steps)
         optmap (apply hash-map options)
-        [steps & dependent-tests]  allsteps]
-    (if-let [data (:data-driven optmap)]
-      (let [optmap (dissoc optmap :data-driven)]
-        (data-driven (merge {:name testname
-                             :steps steps}
-                            optmap)
-                     data))
-      (merge {:name testname
-              :steps steps}
-             optmap
-             (if-not (empty? dependent-tests)
-               {:more (vec (flatten (vec dependent-tests)))} {})))))
+        [steps & dependent-tests]  allsteps
+        basetest {:name testname
+                  :steps `(quote ~steps)
+                  :ns *ns*}]
+    (merge basetest
+           optmap
+           (if-not (empty? dependent-tests)
+             `{:more (vec (flatten ~(vec dependent-tests)))}
+             `{}))))
 
-(defmacro deftest-datadriven [testname & options+kw+data]
-  (let [[options [kw & rows]] (split-opts options+kw+data)
-        thistest (merge {:name testname
-                         :steps kw}
+(defmacro defddtest [testname & options+steps+data]
+  (let [[options [steps params data]] (split-opts options+steps+data)
+        thistest (merge `{:name ~testname
+                         :steps (quote ~steps)
+                         :ns *ns*}
                         (apply hash-map options))]
-    `(data-driven ~thistest ~@rows)))
+    `(data-driven ~thistest (quote ~params) (quote ~data))))
+
+;;these next few will need to change now that we're using
+;;quoted forms rather than functions
 
 (defn add-test-setup [group setup]
   (if setup
@@ -60,42 +61,47 @@
     (after-each teardown group)
     group))
 
-(defn add-group-setup [group groupname setup blockers]
+(def ns-from-sym (comp find-ns symbol namespace))
+
+(defn add-group-setup [group groupsym setup blockers]
   (if (and (map? group) (not setup))
     group
-    (before-all (merge {:name (format "Setup for %s" groupname)
+    (before-all (merge {:name (format "Setup for %s" (name groupsym))
                         :configuration true
-                        :steps (or setup `nil)}
+                        :ns (ns-from-sym groupsym)
+                        :steps (or setup nil)}
                        (if blockers {:blockers blockers} {}))
                 group)))
 
-(defn add-group-teardown [group groupname teardown]
+(defn add-group-teardown [group groupsym teardown]
   (if teardown
-    (after-all {:name (format "Teardown for %s" groupname)
+    (after-all {:name (format "Teardown for %s" (name groupsym))
                 :configuration true
+                :ns (ns-from-sym groupsym)
                 :steps teardown}
                group)
     group))
 
-(defn insert-group-name [tree groupname]
-  (tmap (fn [test]
-          (update-in test [:groups]
-                     (fn [grps] (if grps (conj grps groupname)
-                                   [groupname]))))
-        tree))
+(defn insert-group-name [tree groupsym]
+  (let [groupname (name groupsym)]
+    (tmap (fn [test]
+            (update-in test [:groups]
+                       (fn [grps] (if grps (conj grps groupname)
+                                     [groupname]))))
+          tree)))
 
-(defn defgroup* [forms groupname opts]
+(defn defgroup* [forms groupsym opts]
   (-> forms
      normalize
-     (add-group-setup groupname (:group-setup opts) (:blockers opts))
+     (add-group-setup groupsym (:group-setup opts) (:blockers opts))
      (add-test-setup (:test-setup opts))
-     (insert-group-name groupname) ; need to do this before group
+     (insert-group-name groupsym) ; need to do this before group
                                    ; teardown, otherwise test will
                                    ; gain extra key and won't match the
                                    ; result map keys
      
      (add-test-teardown (:test-teardown opts))
-     (add-group-teardown groupname (:group-teardown opts))))
+     (add-group-teardown groupsym (:group-teardown opts))))
 
 (defmacro defgroup
   "Defines a group of tests as a normal var, named sym. Inside the
@@ -116,10 +122,9 @@
    refer to a group anywhere using its var (including in another
    defgroup). See also deftest." [sym & opts+forms]
   (let [[opts forms] (split-opts opts+forms)
-        opts (apply hash-map opts)
-        groupname (str sym)]
+        opts (apply hash-map opts)]
     `(def ^:dynamic ~sym
-       (defgroup* ~(vec forms) ~groupname ~opts))))
+       (defgroup* ~(vec forms) (quote ~(symbol (str *ns*) (str sym))) ~opts))))
 
 (comment (defgroup abc
            (deftest "blargh"

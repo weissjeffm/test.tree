@@ -5,7 +5,6 @@
   (:use [test.tree.reporter :only [result passed?]]
         test.tree.zip
         slingshot.slingshot)
-  (:refer-clojure :exclude [fn])
   (:import [java.io File]))
 
 ;;;
@@ -15,7 +14,7 @@
 (defn tmap "Does a depth-first walk of the tree, passes each node thru
             f, and returns the tree"
   [f tree]
-  (let [walk-fn (fn [l] (let [new-l (zip/edit l f)] 
+  (let [walk-fn (fn [l] (let [new-l (zip/edit l f)]
                          (zip/next new-l)))]
     (->> tree
        test-zip
@@ -46,23 +45,16 @@
   `(let ~(vec (interleave bare-names params))
      ~code))
 
-(defn data-driven "Generate a set of n data-driven tests. 
+(defn data-driven "Generate a set of n data-driven tests.
                    The metadata both the whole dataset and each row
                    will be preserved."
-  [test data]
-  (vec (let [[param-names & items] data]
+  [test param-names data]
+  (vec (let [items (binding [*ns* (:ns test)]
+                                     (eval data))]
          (for [item items]
-           (let [[bare-params steps] (localize-params param-names (:steps test))]
-             (comment "too soon to run this - a row with metadata would be a false negative."
-                      (when-not (= (count item) (count param-names))
-                        (throw+ {:type ::param-count-mismatch
-                                 :msg "Data driven test must have same number of parameter names as actual parameters."
-                                 :param-names bare-params
-                                 :parameters item})))
-             (->  test
-                 (merge (meta data) (meta item))
-                 (assoc :steps steps
-                        :parameters (map vector bare-params item))))))))
+           (-> test
+              (merge (meta data) (meta item))
+              (assoc :parameters (map vector param-names item)))))))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]
@@ -74,7 +66,7 @@
 
 (defn named?
   [testnames]
-   (by-key :name testnames))
+  (by-key :name testnames))
 
 (defn tagged?
   [testtags]
@@ -100,7 +92,7 @@
   (partial combine-with juxt))
 
 (def ^{:doc "combine two thunks with try/finally (where the f is the try and g is the finally."}
-  combine-finally 
+  combine-finally
   (partial combine-with (fn [f g] (try (f) (finally (g))))))
 
 (defn union
@@ -144,7 +136,7 @@
 (defn wait-for-tree [tree]
   (fn [_]
     (doseq [t (nodes (test-zip tree))]
-           (result t))
+      (result t))
     []))
 
 (defn before-all [t n]
@@ -152,9 +144,9 @@
                        zip/append-child
                        (fn [loc testlist] (test-zip (zip/make-node loc t testlist))))]
     (-> t
-      test-zip
-      (add-child-fn n)
-      zip/root)))
+       test-zip
+       (add-child-fn n)
+       zip/root)))
 
 (defn after-all
   "Takes a tree of tests n, and creates a new tree where

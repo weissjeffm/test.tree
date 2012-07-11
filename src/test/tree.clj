@@ -14,7 +14,8 @@
 (defn execute "Executes test, returns either :pass if the test exits
                normally, or exception the test threw."
   [test]
-  (try+ {:returned (eval (:steps test))      ;test code is called here
+  (try+ {:returned (binding [*ns* (:ns test)]
+                     (eval (:steps test))) ;test code is called here
          :result :pass}
         (catch Object _ {:result :fail
                          :error &throw-context})))
