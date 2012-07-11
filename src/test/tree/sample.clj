@@ -32,15 +32,17 @@
                             (deftest "rename a frob"
                               (do  (println "frob renamed"))
 
-                              (defddtest "indivis by 5"
-                                (-> n (mod 5)
-                                   (= 0)
-                                   (when (throw+ {:type :divisibility :msg "Divisible by 5! Oh noes!"})))
+                              (defddtest "indivisibility"
+                                [{:keys [n divisor]}]
 
-                                [n]
-                                [[1]
-                                 [20]
-                                 (with-meta [7] {:blockers (fn [_] [:blocker1])})]))
+                                (-> n (mod divisor)
+                                   (= 0)
+                                   (when (throw+ {:type :divisibility :msg ("%s divisible by %s! Oh noes!" n divisor)})))
+                                [[{:n 1 :divisor 4}]
+                                 [{:n 20 :divisor 5}]
+                                 [{:n 13 :divisor 0}]
+                                 [{:n 3 :divisor 3}]
+                                 (with-meta [{:n 7 :divisor 4}] {:blockers (fn [_] [:blocker1])})]))
                             (deftest "delete a frob"
                               (do (throw (Exception. "woops, frob could not be deleted."))
                                   (println "frob deleted"))
@@ -68,11 +70,11 @@
                               (do  (println "there2.7"))   
 
                               (defddtest  "do datadriven"
+                                [i j]
                                 (do
                                   (println "did datadriven " i)
                                   (println "time is " (System/currentTimeMillis)))
-                                [i]
-                                [[1] [5] [22] ["hi"] [["a" "b"]] ['(System/currentTimeMillis)]])))
+                                [[1 2] [5 6] [22 -2] ["hi" "there"] [["a" "b"] nil] ['(System/currentTimeMillis) (System/currentTimeMillis)]])))
                          
                           (deftest "borg4"
                             (do  (println "there4"))
@@ -113,3 +115,6 @@
     steps-expr
     data-expr)
   )
+
+
+  

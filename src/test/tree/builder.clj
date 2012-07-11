@@ -27,34 +27,16 @@
   (tmap (fn [n] ((if (pred n) f identity) n))
         tree))
 
-(defn bare-symbol [sym] (-> sym str (str/split #"/") second symbol))
-
-(defn localize-params
-  "Strip namespace from syntax quoted symbols that will be parameters
-   for data driven test. Then the code can be wrapped in a let with
-   those local vars defined. Also returns the params with namespace
-   stripped."
-  [param-names code]
-  (let [bare-params (map bare-symbol param-names)]
-    [bare-params
-     (walk/postwalk-replace (zipmap param-names
-                                    bare-params)
-                            code)]))
-
-(defn data-driven-steps [params bare-names code]
-  `(let ~(vec (interleave bare-names params))
-     ~code))
-
 (defn data-driven "Generate a set of n data-driven tests.
                    The metadata both the whole dataset and each row
                    will be preserved."
-  [test param-names data]
+  [test signature data]
   (vec (let [items (binding [*ns* (:ns test)]
-                                     (eval data))]
+                     (eval data))]
          (for [item items]
            (-> test
               (merge (meta data) (meta item))
-              (assoc :parameters (map vector param-names item)))))))
+              (assoc :parameters (map vector signature item)))))))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]

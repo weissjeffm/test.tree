@@ -41,12 +41,12 @@
              `{}))))
 
 (defmacro defddtest [testname & options+steps+data]
-  (let [[options [steps params data]] (split-opts options+steps+data)
-        thistest (merge `{:name ~testname
-                         :steps (quote ~steps)
-                         :ns *ns*}
+  (let [[options [signature steps data]] (split-opts options+steps+data)
+        basetest (merge `{:name ~testname
+                          :steps (quote ~steps)
+                          :ns *ns*}
                         (apply hash-map options))]
-    `(data-driven ~thistest (quote ~params) (quote ~data))))
+    `(data-driven ~basetest (quote ~signature) (quote ~data))))
 
 ;;these next few will need to change now that we're using
 ;;quoted forms rather than functions
