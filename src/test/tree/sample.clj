@@ -37,7 +37,8 @@
 
                                 (-> n (mod divisor)
                                    (= 0)
-                                   (when (throw+ {:type :divisibility :msg ("%s divisible by %s! Oh noes!" n divisor)})))
+                                   (when (throw+ {:type :divisibility
+                                                  :msg (format "%s divisible by %s! Oh noes!" n divisor)})))
                                 [[{:n 1 :divisor 4}]
                                  [{:n 20 :divisor 5}]
                                  [{:n 13 :divisor 0}]
@@ -72,8 +73,7 @@
                               (defddtest  "do datadriven"
                                 [i j]
                                 (do
-                                  (println "did datadriven " i)
-                                  (println "time is " (System/currentTimeMillis)))
+                                  (println "did datadriven " i j))
                                 [[1 2] [5 6] [22 -2] ["hi" "there"] [["a" "b"] nil] ['(System/currentTimeMillis) (System/currentTimeMillis)]])))
                          
                           (deftest "borg4"

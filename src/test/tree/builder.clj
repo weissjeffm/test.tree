@@ -36,7 +36,8 @@
          (for [item items]
            (-> test
               (merge (meta data) (meta item))
-              (assoc :parameters (map vector signature item)))))))
+              (assoc :parameters item
+                     :signature signature))))))
 
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]

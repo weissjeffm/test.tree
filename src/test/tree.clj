@@ -22,16 +22,18 @@
 
 
 (defn wrap-data-driven [runner]
-  (fn [{:keys [steps parameters signature] :as test}]
+  (fn [{:keys [steps parameters signature ns] :as test}]
     (if parameters
-      (let [realized-params (map eval (map second parameters))
-            signature (map first parameters)]
-        (-> test
-           (assoc :steps (with-meta `(let [~signature ~realized-params]
+      (let [realized-params (binding [*ns* ns]
+                              (eval parameters))
+            actual-steps (with-meta `(let [~signature ~realized-params]
                                        ~steps)
-                           (meta steps)))
+                           (meta steps))]
+        (-> test
+           (assoc :steps actual-steps)
            runner
-           (assoc :parameters (vector signature realized-params))))
+           (assoc :parameters (vector signature realized-params)
+                  :steps actual-steps)))
       (runner test))))
 
 (defn wrap-blockers [runner]
