@@ -51,9 +51,6 @@
   [testnames]
   (by-key :name testnames))
 
-(defn tagged?
-  [testtags]
-  (by-key :tags testtags))
 
 (defn filter-tests [pred]
   (fn [z]
