@@ -174,11 +174,36 @@
      (try ~@body
           (finally (.close ~v)))))
 
+
+;; Depending on the value of this var, either print the standard
+;; clojure way, or turn all objects that can't be printed readably
+;; into strings that can at least be read in.
+
+(def ^:dynamic *print-all-readably* nil)
+
+(defmethod print-method Object [o, ^java.io.Writer w]
+  (when *print-all-readably*
+    (.write w "\""))
+  (.write w "<")
+  (.write w (.getSimpleName (class o)))
+  (.write w " ")
+  (.write w (str o))
+  (.write w ">")
+  (when *print-all-readably*
+    (.write w "\"")))
+
+(defn print-readable-report
+  "Prints a report file in clojure data format, that can be read back
+   in later and analyed."
+  [data]
+
+  )
+
 (defn run-suite "Run the test tree (blocking until all tests are
                  complete) and return the reports list.  Also writes a
                  junit report file to the current directory, and a
                  clojure data file with all the results.  If you want
-                 to just run the tests without blocking, use run-allp."
+                 to just run the tests without blocking, see 'run'."
   [tree & [testrun-name]]
   (let [[threads reports] (run tree testrun-name)]
     (wait-for-all-test-results threads reports)
@@ -188,7 +213,8 @@
                       pprint/*print-suppress-namespaces* true
                       pprint/*print-miser-width* 80
                       *print-length* nil
-                      *print-level* nil]
+                      *print-level* nil
+                      *print-all-readably* true]
               (pprint/pprint (sort-by (fn [item] (-> item :report :start-time))
                                       (map merge
                                            (keys @reports)
