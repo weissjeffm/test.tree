@@ -80,7 +80,8 @@
            (deliver (:promise (@reports this-test)) :done))
          (catch Exception e
            (deliver (:promise (@reports this-test)) e)
-           (println "report delivered with error: "  (:name this-test) ": " e))))
+           (println "report delivered with error: "  (:name this-test) ": " e)
+           (.printStackTrace e))))
   (doseq [child-test (child-locs test-tree-zip)]
     (queue child-test testrun-queue reports)))
 
