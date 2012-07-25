@@ -220,7 +220,8 @@
                                            (keys @reports)
                                            (for [v (vals @reports)]
                                              (dissoc v :promise :status))))))))
-    (binding [*reports* reports]
+    (binding [*reports* reports
+              *print-all-readably* true]
       (redir [*out* (java.io.FileWriter. "testng-report.xml")]
              (testng-report))
       (redir [*out* (java.io.FileWriter. "junitreport.xml")]
