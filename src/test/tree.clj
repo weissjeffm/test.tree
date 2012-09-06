@@ -122,6 +122,11 @@
           (not unrun-tests) :finished
           :else :deadlocked)))
 
+(defn terminate-all-tests [threads]
+  "Terminates all running test threads."
+  (doseq [t threads] 
+         (when (live? t) (.terminate t))))
+
 (defn wait-for-all-test-results [threads reports]
  (loop [s (state threads reports)]
     (case s
