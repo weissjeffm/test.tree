@@ -123,6 +123,7 @@
           :else :deadlocked)))
 
 (defn terminate-all-tests [threads]
+  "Terminates all running test threads."
   (doseq [t threads] 
          (when (live?) (.terminate t))))
 
