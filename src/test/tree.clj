@@ -139,8 +139,8 @@
                    (recur (state threads reports)))))) 
 (defn run
   "Runs all tests in the tree, in parallel (if threads are set >1).
-  Returns a future object that when deref'd will block until all tests
-  are done, and return reports data."
+   Returns a two-element list containing the worker threads and test 
+   reports data."
   [tree & [testrun-name]]
   (let [thread-runner (or (-> tree meta :thread-runner) identity)
         setup (or (-> tree meta :setup) (constantly nil))
