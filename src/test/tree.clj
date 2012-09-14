@@ -71,13 +71,16 @@
 (defn run-test [test-tree-zip testrun-queue reports blockers]
   (let [this-test (-> test-tree-zip zip/node plain-node)]
     (try (let [all-blockers (concat blockers (binding [*reports* reports]
-                                               (parent-blocker test-tree-zip)))
-               report (runner (assoc this-test :blocked-by all-blockers))]
+                                               (parent-blocker test-tree-zip)))]
            (dosync
             (alter reports update-in [this-test]
-                   merge {:status :done
-                          :report report}))
-           (deliver (:promise (@reports this-test)) :done))
+                   assoc :status :running))
+           (let [report (runner (assoc this-test :blocked-by all-blockers))]
+             (dosync
+              (alter reports update-in [this-test]
+                     merge {:status :done
+                            :report report}))
+             (deliver (:promise (@reports this-test)) :done)))
          (catch Exception e
            (deliver (:promise (@reports this-test)) e)
            (println "report delivered with error: "  (:name this-test) ": " e)
