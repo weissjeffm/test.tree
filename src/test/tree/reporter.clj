@@ -158,7 +158,7 @@
         passes (passed-tests)
         [numfail numskip numpass] (map count [fails skips passes])
         total (+ numfail numskip numpass)
-        grouped-by-class (group-by :name (keys @*reports*))
+        grouped-by-class (group-by :groups (keys @*reports*))
         to-ms-str #(-> (* % 1000) Math/round str)
         suite-duration-ms (to-ms-str (total-time))
         date-format (fn [unixdate] (.format testng-dateformat (java.util.Date. unixdate)))
@@ -186,10 +186,11 @@
                            :duration-ms suite-duration-ms
                            :started-at (date-format (System/currentTimeMillis))
                            :finished-at (date-format (System/currentTimeMillis))} ;;need real values here
-                    (for [[clazz methods] grouped-by-class]
+                    (for [[groups methods] grouped-by-class]
                       [:class {:name (apply str (interpose "."
-                                                           (or (reverse (:groups (first methods)))
-                                                               ["rootClass"])))}
+                                                           (or
+                                                            (-> groups reverse vec (conj (first groups)))
+                                                            ["rootClass"])))}
                        (for [method methods]
                          (let [tr (:report (@*reports* method))]
                            [:test-method (info method tr)
