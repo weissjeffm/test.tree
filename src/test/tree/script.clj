@@ -40,7 +40,7 @@
   numbers' (assert (-> (+ 2 2) (= 4)))) "
   [testname & options+steps]
   (let [[options allsteps] (split-opts options+steps)
-        optmap (apply hash-map options)
+        optmap (merge {:file *file*} (meta &form) (apply hash-map options)) 
         [steps dependent-tests] (split-deftests allsteps)]
     (if (:data-driven optmap)
       (conj (concat (mapcat vec (dissoc optmap :data-driven))
