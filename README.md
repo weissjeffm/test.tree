@@ -73,7 +73,7 @@ function enters the input and compares the output to the expected
 value. To do data driven testing, you just create a bunch of rows of
 [input, expected-value]. See the example below. In this case, the
 *calc.test/add* function (not shown) must take two arguments - a list
-of numbers to add, and the expected sum, because.
+of numbers to add, and the expected sum.
 
 ## Example test suite program
 
@@ -87,12 +87,12 @@ of numbers to add, and the expected sum, because.
 
    (deftest "enter numbers"
      (calc.test/enter-number 123)
-     (assert (= (calc.test/current-display "123")))
+     (assert (= (calc.test/current-display) "123"))
 
      (deftest "clear display"
         (calc.test/enter-number 234)
         (calc.test/clear-display)
-        (assert (= (calc.test/current-display "")))
+        (assert (= (calc.test/current-display) ""))
 
         (deftest "add numbers"
            :data-driven true
@@ -127,16 +127,30 @@ of tests.
 
 ### Optional keys
 
-Options be placed inside deftest or defgroup, after the name. 
+Options can be placed inside deftest or defgroup, after the name. 
 
 ```Lisp
 (deftest "my test"
    :blockers     (constantly ["this test is currently disabled"])
    :description  "Runs foobar widget tests."
     
-   (my-step1)
-   (my-step2))
-```       
+   (my-step1) (my-step2)) ``` 
+
+* *:blockers* - A callback function to determine at runtime if this
+   test should be skipped before it's attempted. If you have a test
+   that's been failing every run and there's nothing further you can
+   do to get it fixed, you may want to block it from being run. That
+   way, it doesn't pollute your test results. If this test should be
+   skipped, this function should return a list of reasons why it was
+   skipped. For example, already-reported bugs, missing dependencies,
+   or that you've disabled it temporarily. The type of each item
+   returned by the function is up to you - whatever you would want to
+   see to explain why a test was skipped. Generally strings or
+   keywords work well. This callback function will receive one
+   argument (the whole test tree, in case that information is needed
+   to calculate the blockers list). It's unusual to need to work with
+   this argument directly, it's safe to just ignore it.
+    
 * *:group-setup* - defgroup only.  Before any test in the group is
   run, run the given no-arg function.  
   
@@ -144,14 +158,11 @@ Options be placed inside deftest or defgroup, after the name.
   group have been run (or skipped), run the given no-arg function.
   
 * *:test-setup* - defgroup only. Before each and every test in the
-  group, run this function.  Note
-  this function should take a variable number of args but again
-  can safely ignore the args (in clojure an ignored argument is
-  usually named _ by convention).
-  
-* *:test-teardown* - defgroup only.  After each and every test in the
-   group, run this function.  Note the arguments (see *:test-setup*
-   above).  Also note that *:test-teardown* will run even if the test fails.
+  group, run this function. Note this function signature should take a
+  variable number of args. What will be passed in is the data of a
+  data driven test, or nothing if the test isn't data driven. If your
+  setup doesn't care about the data, you can safely ignore the args
+  (in clojure an ignored argument is usually named _ by convention).
 
 ```Lisp
 (defgroup calc-division-tests
@@ -160,24 +171,15 @@ Options be placed inside deftest or defgroup, after the name.
    (deftest ... )
    (deftest ... ) ... )  
 ```
+  
+* *:test-teardown* - defgroup only.  After each and every test in the
+   group, run this function.  Note the arguments (see *:test-setup*
+   above).  Also note that *:test-teardown* will run even if the test fails.
 
 * *:test-teardown* - defgroup only. Same as test-setup, but runs
   *after* each and every test, and the teardown will always be run,
   even if the test fails.
-* *:blockers* - A callback function to determine at runtime if
-  this test should be skipped before it's attempted. If you have a
-  test that's been failing every run and there's nothing further
-  you can do to get it fixed, you may want to block it from being
-  run. That way, it doesn't pollute your test results. If this
-  test should be skipped, this function should return a list of
-  reasons why it was skipped. For example, already-reported bugs,
-  missing dependencies, or that you've disabled it temporarily.
-  The type of each item returned by the function is up to you -
-  whatever you would want to see to explain why a test was
-  skipped. Generally strings or keywords work well. This callback
-  function will receive one argument, it's safe for the function
-  to ignore the argument. It's used by some built-in callback
-  functions that are provided in test.tree. 
+
 
 ```Lisp
 (deftest "my test"
