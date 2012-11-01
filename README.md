@@ -134,7 +134,8 @@ Options can be placed inside deftest or defgroup, after the name.
    :blockers     (constantly ["this test is currently disabled"])
    :description  "Runs foobar widget tests."
     
-   (my-step1) (my-step2)) ``` 
+   (my-step1) (my-step2)) 
+``` 
 
 * *:blockers* - A callback function to determine at runtime if this
    test should be skipped before it's attempted. If you have a test
