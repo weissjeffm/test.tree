@@ -189,6 +189,25 @@
 
 (def ^:dynamic *print-all-readably* nil)
 
+(defmethod print-method clojure.lang.IDeref [o ^java.io.Writer w]
+  (.write w "\"")
+  ((deref #'clojure.core/print-sequential) 
+    (format "#<%s@%x%s: "
+            (.getSimpleName (class o))
+            (System/identityHashCode o)
+            (if (and (instance? clojure.lang.Agent o)
+                     (agent-error o))
+              " FAILED"
+              ""))
+    (deref #'clojure.core/pr-on), "", ">", (list (if (and (instance? clojure.lang.IPending o) (not (.isRealized o)))
+                                                   :pending
+                                                   @o)), w)
+  (.write w "\""))
+
+(defmethod print-method Throwable [t out]
+  (print-ctor t (fn [o w]
+                  (print-method (.getMessage t) w)) out))
+
 (defmethod print-method Object [o, ^java.io.Writer w]
   (when *print-all-readably*
     (.write w "\""))
@@ -223,11 +242,7 @@
                       *print-length* nil
                       *print-level* nil
                       *print-all-readably* true]
-              (pprint/pprint (sort-by (fn [item] (-> item :report :start-time))
-                                      (map merge
-                                           (keys @reports)
-                                           (for [v (vals @reports)]
-                                             (dissoc v :promise :status))))))))
+              (pr @reports))))
     (binding [*reports* reports
               *print-all-readably* true]
       (redir [*out* (java.io.FileWriter. "testng-report.xml")]
