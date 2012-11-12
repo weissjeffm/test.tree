@@ -225,7 +225,7 @@
                       *print-length* nil
                       *print-level* nil
                       *print-all-readably* true]
-              (pr @reports))))
+              (pr (list tree @reports)))))
     (binding [*reports* reports
               *print-all-readably* true]
       (redir [*out* (java.io.FileWriter. "testng-report.xml")]
