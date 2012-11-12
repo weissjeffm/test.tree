@@ -189,42 +189,25 @@
 
 (def ^:dynamic *print-all-readably* nil)
 
-(defmethod print-method clojure.lang.IDeref [o ^java.io.Writer w]
+;; save the original core dispatch functions
+(defonce print-method-orig-object (get-method print-method Object))
+(defonce print-method-orig-ideref (get-method print-method clojure.lang.IDeref))
+
+(defn print-quoted [f o w]
   (.write w "\"")
-  ((deref #'clojure.core/print-sequential) 
-    (format "#<%s@%x%s: "
-            (.getSimpleName (class o))
-            (System/identityHashCode o)
-            (if (and (instance? clojure.lang.Agent o)
-                     (agent-error o))
-              " FAILED"
-              ""))
-    (deref #'clojure.core/pr-on), "", ">", (list (if (and (instance? clojure.lang.IPending o) (not (.isRealized o)))
-                                                   :pending
-                                                   @o)), w)
+  (f o w)
   (.write w "\""))
 
-(defmethod print-method Throwable [t out]
-  (print-ctor t (fn [o w]
-                  (print-method (.getMessage t) w)) out))
+
+(defmethod print-method clojure.lang.IDeref [o ^java.io.Writer w]
+  (if *print-all-readably*
+    (print-quoted print-method-orig-ideref o w)
+    (print-method-orig-ideref o w)))
 
 (defmethod print-method Object [o, ^java.io.Writer w]
-  (when *print-all-readably*
-    (.write w "\""))
-  (.write w "<")
-  (.write w (.getSimpleName (class o)))
-  (.write w " ")
-  (.write w (str o))
-  (.write w ">")
-  (when *print-all-readably*
-    (.write w "\"")))
-
-(defn print-readable-report
-  "Prints a report file in clojure data format, that can be read back
-   in later and analyed."
-  [data]
-
-  )
+  (if *print-all-readably*
+    (print-quoted print-method-orig-object o w)
+    (print-method-orig-object o w)))
 
 (defn run-suite "Run the test tree (blocking until all tests are
                  complete) and return the reports list.  Also writes a
