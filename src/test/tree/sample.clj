@@ -23,7 +23,7 @@
                                                                     (fn [n] (-> n
                                                                               (mod 5)
                                                                               (= 0)
-                                                                              (when (throw+ (:type :divisibility :msg "Divisible by 5! Oh noes!")))))} [[1] [20]  (with-meta (fn [] [7]) {:blockers (fn [_] [:blocker1])})])}
+                                                                              (when (throw+ {:type :divisibility :msg "Divisible by 5! Oh noes!"}))))} [[1] [20]  (with-meta (fn [] [7]) {:blockers (fn [_] [:blocker1])})])}
                                        {:name "delete a frob"
                                         :steps (fn [] (Thread/sleep 400)
                                                  (throw (Exception. "woops, frob could not be deleted."))

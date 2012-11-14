@@ -12,44 +12,55 @@
 
 (defn execute "Executes test, returns either :pass if the test exits
                normally, or exception the test threw."
-  [test]
-  (try+ {:returned ((:steps test))      ;test fn is called here
-         :result :pass}
-        (catch Object _ {:result :fail
-                         :error &throw-context})))
+  [{:keys [steps test]}]
+  ;; if the request has a :steps entry, use that. if not, use :steps
+  ;; entry from the :test map.
+  (let [steps (or steps (:steps test))]
+    (try+ {:returned (steps)            ;test fn is called here
+           :result :pass}
+          (catch Object _ {:result :fail
+                           :error &throw-context}))))
 
 
 (defn wrap-data-driven [runner]
-  (fn [{:keys [steps parameters] :as test}]
+  (fn [{{:keys [steps parameters]} :test :as req}]
     (if parameters
       (let [realized-params (realize parameters)]
-        (-> test
+        (-> req
            (assoc :steps (with-meta (fn [] (apply steps realized-params))
                            (meta steps)))
            runner
            (assoc :parameters realized-params)))
-      (runner test))))
+      (runner req))))
 
 (defn wrap-blockers [runner]
-  (fn [{:keys [blocked-by always-run] :as test}]
+  (fn [{{:keys [always-run]} :test blocked-by :blocked-by :as req}]
     (let [blocked? (-> blocked-by (or []) count (> 0))]
       (if (and blocked? (not always-run))
         {:result :skip
          :blocked-by blocked-by}
-        (runner test)))))
+        (runner req)))))
 
 (defn wrap-timer [runner]
-  (fn [test]
+  (fn [req]
     (let [start-time (System/currentTimeMillis)]
-      (-> test
+      (-> req
          runner
          (assoc :start-time start-time :end-time (System/currentTimeMillis))))))
 
 (defn wrap-thread-logging [runner]
-  (fn [test]
-    (-> test runner (assoc :thread (.getName (Thread/currentThread))))))
+  (fn [req]
+    (-> req runner (assoc :thread (.getName (Thread/currentThread))))))
 
-(def ^:dynamic runner
+(def ^{:dynamic true
+       :doc "A rebindable test runner to allow extensibility. The
+             runner will be a function of one arg - a request map
+             like:
+                 {:blocked-by ['myblocker']
+                  :test { test data here ... } and returns a map of
+             results. See test.tree.reports for contracts that the
+             results should adhere to."}
+  runner
   (-> execute
      wrap-blockers
      wrap-timer
@@ -75,7 +86,7 @@
            (dosync
             (alter reports update-in [this-test]
                    assoc :status :running))
-           (let [report (runner (assoc this-test :blocked-by all-blockers))]
+           (let [report (runner {:test this-test :blocked-by all-blockers})]
              (dosync
               (alter reports update-in [this-test]
                      merge {:status :done
