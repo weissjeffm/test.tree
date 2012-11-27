@@ -92,7 +92,7 @@
 
 (def ^{:doc "combine two thunks with try/finally (where the f is the try and g is the finally."}
   combine-finally 
-  (partial combine-with (fn [f g] (try (f) (finally (g))))))
+  (partial combine-with (fn [f g] (fn [& args] (try (apply f args) (finally (apply g args)))))))
 
 (defn union
   "Takes the given functions and returns a new function. When that
