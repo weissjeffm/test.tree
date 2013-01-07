@@ -203,9 +203,11 @@ Options can be placed inside deftest or defgroup, after the name.
 * *:description* - a detailed description of the test.  Used for
   inclusion in reports such as testNG xml report.
 
-### Metadata keys
+### Test Run Options
 
-These are configuration options for the entire suite, all optional.
+These are configuration options for the entire test run. They are
+passed as an optional map as the 2nd argument to `test.tree/run` or
+`test.tree/run-suite`.
 
 * *:setup* A no-arg function to be called when starting the suite.
    It's called before any of the worker threads are created.
@@ -235,15 +237,13 @@ These are configuration options for the entire suite, all optional.
 
 
 ```clj
-(def tests-to-run 
-  (with-meta all-calc-tests
-    {:thread-runner (fn [run-tests] 
-                      (open-my-browser "firefox")
-                      (run-tests)
-                      (close-my-browser))
-     :threads 5}
 (defn -main [ & args] 
-  (test.tree/run-suite all-calc-tests))
+  (test.tree/run-suite all-calc-tests
+                       {:thread-runner (fn [run-tests] 
+                                         (open-my-browser "firefox")
+                                         (run-tests)
+                                         (close-my-browser))
+                        :threads 5}))
 ```
 
 ## Why use a tree structure?
