@@ -12,16 +12,16 @@
 (defn init-reports [z]
   (ref (zipmap (test.tree.zip/nodes z)
                (repeatedly (fn [] {:status :waiting
-                                  :promise (promise)})))))
+                                  :report (promise)})))))
 
 (defmulti exception :wrapper)
 (defmethod exception nil [e] (:object e))
 (defmethod exception :default [e] (:wrapper e))
 
 
-;; Functions to process testentries (mapentry of test to report)
+;; Functions to process testsentries (mapentry of test to report)
 
-(def test-report (comp :report val))
+(def test-report (comp deref :report val))
 
 (def blocked-by (comp :blocked-by test-report))
 
@@ -34,6 +34,9 @@
 (def realized-parameters (comp :parameters test-report))
 
 (def configuration? (comp boolean :configuration key))
+
+(def testgroup (comp :groups key))
+
 
 (defn passed? [testentry]
   (= (result testentry) :pass))
@@ -58,16 +61,21 @@
   "Given a reference to reports, wait for test to complete (if not
   already) and return whether it passed."
   [report-ref test]
-  (-> report-ref deref (get test) :promise deref)
-  (-> report-ref deref (get test) :report :result (= :pass)))
+  (-> report-ref deref (get test) :report deref :result (= :pass)))
 
 (defn total-time [report]
   (reduce + (map execution-time report)))
 
+(defn blocking-test
+  "Returns a representation of a test suitable for listing as a
+   blocker of another test. Just the name and parameters."
+  [t]
+  (select-keys t [:name :parameters]))
 
 (defn blocker-report [report]
-  (->> vals
-     (mapcat #(get-in % [:report :blocked-by]))
+  (->> report
+     vals
+     (mapcat #(-> % :report deref :blocked-by))
      (filter #(not (nil? %)))
      frequencies))
 
@@ -75,15 +83,6 @@
   (format "On thread %s: %s"
           (thread t)
           (-> t error :message))) 
-
-;; Functions for grouping report mapentries - where test is key and
-;; testreport is the value
-
-(def test-or-config (comp configuration? key))
-
-(def result (comp :result :report val))
-
-(def testgroup (comp :groups key))
 
 ;; Functions for generating specific format of report
 
@@ -146,12 +145,9 @@
               (url "styles/shCoreEmacs.css")
               s))))
 
-
-(def plain-text identity)
-
 ;;a rebindable function to do syntax highlighting on some code/data in
 ;;a report.  Should take text and return the syntaxhighlighted html
-(def ^:dynamic syntax-highlight plain-text)
+(def ^:dynamic syntax-highlight identity)
 
 
 (defn testng-report "Produce an xml report consistent with the

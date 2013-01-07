@@ -77,7 +77,7 @@ of numbers to add, and the expected sum.
 
 ## Example test suite program
 
-```Lisp
+```clj
 (require 'calc.test)
 (use 'test.tree.script)
 
@@ -114,7 +114,7 @@ function will accept this as an argument.  You can also refer to
 a group's var within another defgroup, to build up a larger structure
 of tests.
 
-```Lisp
+```clj
 (defgroup all-tests
   simple-calc-tests
   scientific-calc-tests
@@ -129,7 +129,7 @@ of tests.
 
 Options can be placed inside deftest or defgroup, after the name. 
 
-```Lisp
+```clj
 (deftest "my test"
    :blockers     (constantly ["this test is currently disabled"])
    :description  "Runs foobar widget tests."
@@ -148,9 +148,17 @@ Options can be placed inside deftest or defgroup, after the name.
    returned by the function is up to you - whatever you would want to
    see to explain why a test was skipped. Generally strings or
    keywords work well. This callback function will receive one
-   argument (the whole test tree, in case that information is needed
-   to calculate the blockers list). It's unusual to need to work with
-   this argument directly, it's safe to just ignore it.
+   argument - a map: 
+```clj
+{:test-zipper #<A zipper structure, with the "current" location set to the test being run>
+ :reports #<A ref to the reports of the entire test run>
+}
+```
+
+   Sometimes you need access to this information to determine whether
+   a test should be blocked or not.  For example, it may depend on
+   another test that is not the direct parent.  If you don't need any
+   of this information, you can just ignore the argument.
     
 * *:group-setup* - defgroup only.  Before any test in the group is
   run, run the given no-arg function.  
@@ -165,7 +173,7 @@ Options can be placed inside deftest or defgroup, after the name.
   setup doesn't care about the data, you can safely ignore the args
   (in clojure an ignored argument is usually named _ by convention).
 
-```Lisp
+```clj
 (defgroup calc-division-tests
    :test-setup (fn [& _] (calc.test/clear-display))
    
@@ -173,16 +181,12 @@ Options can be placed inside deftest or defgroup, after the name.
    (deftest ... ) ... )  
 ```
   
-* *:test-teardown* - defgroup only.  After each and every test in the
-   group, run this function.  Note the arguments (see *:test-setup*
-   above).  Also note that *:test-teardown* will run even if the test fails.
-
 * *:test-teardown* - defgroup only. Same as test-setup, but runs
   *after* each and every test, and the teardown will always be run,
   even if the test fails.
 
 
-```Lisp
+```clj
 (deftest "my test"
    :blockers (fn [_] (my.bugtracker.client/is-bug-still-open? "bug654321"))
    
@@ -230,7 +234,7 @@ These are configuration options for the entire suite, all optional.
   thread.
 
 
-```Lisp
+```clj
 (def tests-to-run 
   (with-meta all-calc-tests
     {:thread-runner (fn [run-tests] 

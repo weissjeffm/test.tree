@@ -73,7 +73,8 @@
   [test-tree-zip reports]
   (let [parent (-?> test-tree-zip zip/up zip/node tz/plain-node)]
     (if (and parent (not (reporter/test-passed? reports parent)))
-      [parent]
+      ;;only list the name and parameters of a blocking test
+      [(reporter/blocking-test parent)]
       [])))
 
 (declare queue)
@@ -86,12 +87,11 @@
                    assoc :status :running))
            (let [report (runner {:test this-test :blocked-by all-blockers})]
              (dosync
-              (alter reports update-in [this-test]
-                     merge {:status :done
-                            :report report}))
-             (deliver (:promise (@reports this-test)) :done)))
+              (let [updated-reports (alter reports update-in [this-test]
+                                           assoc :status :done)]
+                (deliver (-> updated-reports (get this-test) :report) report)))))
          (catch Exception e
-           (deliver (:promise (@reports this-test)) e)
+           (deliver (:report (@reports this-test)) e)
            (println "report delivered with error: "  (:name this-test) ": " e)
            (.printStackTrace e))))
   (doseq [child-test (tz/child-locs test-tree-zip)]
@@ -111,9 +111,12 @@
              until it is consumed."
   [test-tree-zip testrun-queue reports]
   (future
-    (let [blockers (try (doall ((or (-> test-tree-zip zip/node :blockers) ;; TODO is doall really needed?
+    ;; force calculation of blockers so that exceptions will be caught
+    ;; here, rather than possibly uncaught where the values are consumed.
+    (let [blockers (try (doall ((or (-> test-tree-zip zip/node :blockers) 
                                     (constantly [])) ;;default blocker fn returns empty list
-                                test-tree-zip))
+                                {:test-zipper test-tree-zip
+                                 :reports reports}))
                         (catch Exception e [e]))]
       (.offer testrun-queue (fn [] (run-test test-tree-zip testrun-queue reports blockers)))
       (dosync
