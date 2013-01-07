@@ -1,8 +1,8 @@
 (ns test.tree.builder
-  (:require [clojure.zip :as zip])
-  (:use [serializable.fn :only [fn]]
-        [test.tree.reporter :only [result passed?]]
-        test.tree.zip)
+  (:require [clojure.zip :as zip]
+            [serializable.fn :refer [fn]]
+            (test.tree [reporter :as reporter]
+                       [zip :as tz]))
   (:refer-clojure :exclude [fn])
   (:import [java.io File]))
 
@@ -27,10 +27,9 @@
 (defn tmap "Does a depth-first walk of the tree, passes each node thru
             f, and returns the tree"
   [f tree]
-  (let [walk-fn (fn [l] (let [new-l (zip/edit l f)] 
-                         (zip/next new-l)))]
+  (let [walk-fn #(-> % (zip/edit f) zip/next)]
     (->> tree
-       test-zip
+       tz/test-zip
        (iterate walk-fn)
        (drop-while (complement zip/end?))
        first
@@ -73,7 +72,7 @@
 
 (defn filter-tests [pred]
   (fn [z]
-    (filter pred (-> z zip/root test-zip nodes))))
+    (filter pred (-> z zip/root tz/test-zip nodes))))
 
 (defn combine-with
   "combines two thunks into one, using given combinator-fn, and combine
@@ -92,7 +91,9 @@
 
 (def ^{:doc "combine two thunks with try/finally (where the f is the try and g is the finally."}
   combine-finally 
-  (partial combine-with (fn [f g] (fn [& args] (try (apply f args) (finally (apply g args)))))))
+  (partial combine-with (fn [f g]
+                          (fn [& args]
+                            (try (apply f args) (finally (apply g args)))))))
 
 (defn union
   "Takes the given functions and returns a new function. When that
@@ -108,7 +109,11 @@
    the list of names to only include tests that have failed or
    skipped."
   [& names]
-  (filter-tests (every-pred (named? names) (complement passed?))))
+  (fn [m]
+    (map reporter/blocking-test
+         ((filter-tests (every-pred (named? names)
+                                    (complement (partial reporter/test-passed? (:reports m)))))
+          (:test-zipper m)))))
 
 (defn before-test "Run f before the steps of test node n" [f n]
   (let [s (:steps n)]
@@ -133,17 +138,17 @@
   (run-after (complement :configuration) f n))
 
 (defn wait-for-tree [tree]
-  (fn [_]
-    (doseq [t (nodes (test-zip tree))]
-           (result t))
+  (fn [m]
+    (doseq [t (nodes (tz/test-zip tree))]
+           (reporter/test-passed? (:reports m) t))
     []))
 
 (defn before-all [t n]
   (let [add-child-fn (if (map? n)
                        zip/append-child
-                       (fn [loc testlist] (test-zip (zip/make-node loc t testlist))))]
+                       (fn [loc testlist] (tz/test-zip (zip/make-node loc t testlist))))]
     (-> t
-      test-zip
+      tz/test-zip
       (add-child-fn n)
       zip/root)))
 
@@ -152,7 +157,7 @@
    test t runs after all the tests in n."
   [t n]
   (-> n
-     test-zip
+     tz/test-zip
      (zip/append-child (assoc t :blockers (wait-for-tree n)))
      zip/root))
 

@@ -1,13 +1,12 @@
 (ns test.tree
   (:require [clojure.zip :as zip]
-            [clojure.pprint :as pprint])
-  (:use slingshot.slingshot
-        [clojure.core.incubator :only [-?>]]
-        test.tree.zip
-        [test.tree.builder :only [realize]]
-        [test.tree.reporter :only [passed? *reports* init-reports junit-report testng-report]])
-
-  (import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
+            [clojure.pprint :as pprint]
+            [slingshot.slingshot :refer [try+]]
+            [clojure.core.incubator :refer [-?>]]
+            (test.tree [zip :as tz]
+                       [builder :as build]
+                       [reporter :as reporter]))
+  (:import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
 (defn execute "Executes test, returns either :pass if the test exits
@@ -25,7 +24,7 @@
 (defn wrap-data-driven [runner]
   (fn [{{:keys [steps parameters]} :test :as req}]
     (if parameters
-      (let [realized-params (realize parameters)]
+      (let [realized-params (build/realize parameters)]
         (-> req
            (assoc :steps (with-meta (fn [] (apply steps realized-params))
                            (meta steps)))
@@ -71,32 +70,31 @@
                       test (since each node only has one parent, it
                       will either be empty or have 1 item, the parent
                       test)"
-  [test-tree-zip]
-  (let [parent (-?> test-tree-zip zip/up zip/node plain-node)]
-    (if (and parent (not (passed? parent)))
-      [parent]
+  [test-tree-zip reports]
+  (let [parent (-?> test-tree-zip zip/up zip/node tz/plain-node)]
+    (if (and parent (not (reporter/test-passed? reports parent)))
+      ;;only list the name and parameters of a blocking test
+      [(reporter/blocking-test parent)]
       [])))
 
 (declare queue)
 
 (defn run-test [test-tree-zip testrun-queue reports blockers]
-  (let [this-test (-> test-tree-zip zip/node plain-node)]
-    (try (let [all-blockers (concat blockers (binding [*reports* reports]
-                                               (parent-blocker test-tree-zip)))]
+  (let [this-test (-> test-tree-zip zip/node tz/plain-node)]
+    (try (let [all-blockers (concat blockers (parent-blocker test-tree-zip reports))]
            (dosync
             (alter reports update-in [this-test]
                    assoc :status :running))
            (let [report (runner {:test this-test :blocked-by all-blockers})]
              (dosync
-              (alter reports update-in [this-test]
-                     merge {:status :done
-                            :report report}))
-             (deliver (:promise (@reports this-test)) :done)))
+              (let [updated-reports (alter reports update-in [this-test]
+                                           assoc :status :done)]
+                (deliver (-> updated-reports (get this-test) :report) report)))))
          (catch Exception e
-           (deliver (:promise (@reports this-test)) e)
+           (deliver (:report (@reports this-test)) e)
            (println "report delivered with error: "  (:name this-test) ": " e)
            (.printStackTrace e))))
-  (doseq [child-test (child-locs test-tree-zip)]
+  (doseq [child-test (tz/child-locs test-tree-zip)]
     (queue child-test testrun-queue reports)))
 
 (defn consume "Starts polling the test queue, takes tests from the
@@ -113,14 +111,16 @@
              until it is consumed."
   [test-tree-zip testrun-queue reports]
   (future
-    (let [blockers (try (binding [*reports* reports]
-                          (doall ((or (-> test-tree-zip zip/node :blockers)
-                                      (constantly [])) ;;default blocker fn returns empty list
-                                  test-tree-zip)))
+    ;; force calculation of blockers so that exceptions will be caught
+    ;; here, rather than possibly uncaught where the values are consumed.
+    (let [blockers (try (doall ((or (-> test-tree-zip zip/node :blockers) 
+                                    (constantly [])) ;;default blocker fn returns empty list
+                                {:test-zipper test-tree-zip
+                                 :reports reports}))
                         (catch Exception e [e]))]
       (.offer testrun-queue (fn [] (run-test test-tree-zip testrun-queue reports blockers)))
       (dosync
-       (alter reports assoc-in [(-> test-tree-zip zip/node plain-node) :status] :queued)))))
+       (alter reports assoc-in [(-> test-tree-zip zip/node tz/plain-node) :status] :queued)))))
 
 (defn live? "is the thread alive (not terminated?)"
   [t]
@@ -164,8 +164,8 @@
                               thread-runner)
                            (str "test.tree-thread" agentnum)))
         watchers (or (-> tree meta :watchers) {})
-        test-tree-zip (test-zip tree)
-        reports (init-reports test-tree-zip)]
+        test-tree-zip (tz/test-zip tree)
+        reports (reporter/init-reports test-tree-zip)]
 
     ;;start worker threads
     (doseq [thread threads] (.start thread))
@@ -237,11 +237,9 @@
                       *print-level* nil
                       *print-all-readably* true]
               (pr (list tree @reports)))))
-    (binding [*reports* reports
-              *print-all-readably* true]
+    (binding [*print-all-readably* true]
       (redir [*out* (java.io.FileWriter. "testng-report.xml")]
-             (testng-report))
+             (reporter/testng-report @reports))
       (redir [*out* (java.io.FileWriter. "junitreport.xml")]
-             (junit-report)))
-
+             (reporter/junit-report @reports)))
     @reports))
