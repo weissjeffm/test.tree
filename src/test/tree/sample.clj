@@ -11,6 +11,7 @@
                         :more [{:name "create a widget"
                                 :steps (fn [] (Thread/sleep 300) (println "widget created") (throw (Exception. "woops"))) }
                                {:name "create a sprocket"
+                                :configuration true
                                 :steps (fn [] (Thread/sleep 500) (println (str "sprocket created " myvar )))
                                 :more [{:name "send a sprocket via email"
                                         :steps (fn [] (Thread/sleep 400) (println "sent sprocket"))}]}

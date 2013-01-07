@@ -1,7 +1,8 @@
 (ns test.tree.reporter
-  (:require [clojure.prxml :as xml])
-  (:use clojure.pprint
-        [test.tree.zip :only [nodes]]
+  (:require [clojure.prxml :as xml]
+            [clojure.set :as sets]
+            test.tree.zip)
+  (:use clojure.pprint 
         [clj-stacktrace.repl :only [pst-str]]))
 
 (def ^:dynamic *reports* nil) ;meant to be rebound by threads running particular
@@ -9,7 +10,7 @@
                     ;the same suite or using the same reports
                     
 (defn init-reports [z]
-  (ref (zipmap (nodes z)
+  (ref (zipmap (test.tree.zip/nodes z)
                (repeatedly (fn [] {:status :waiting
                                   :promise (promise)})))))
 
@@ -17,64 +18,55 @@
 (defmethod exception nil [e] (:object e))
 (defmethod exception :default [e] (:wrapper e))
 
-(defn report [test]
-  ;;need to deref the reports both before and after the promise is
-  ;;delivered, otherwise the report doesn't have the result yet.
-  (deref (:promise (@*reports* test)))
-  (:report (@*reports* test)))  
 
-(defn blocked-by [test]
-  (-> test report :blocked-by))
+;; Functions to process testentries (mapentry of test to report)
 
-(defn result [test]
-  (-> test report :result))
+(def test-report (comp :report val))
 
-(defn error [test]
-  (-> test report :error))
+(def blocked-by (comp :blocked-by test-report))
 
-(defn thread [test]
-  (-> test report :thread))
+(def result (comp :result test-report))
 
-(defn passed? [test]
-  (= (result test) :pass))
+(def error (comp :error test-report))
 
-(defn configuration? [test]
-  (boolean (:configuration test)))
+(def thread (comp :thread test-report))
 
-(defn skipped? [test]
-  (= (result test) :skip))
+(def realized-parameters (comp :parameters test-report))
 
-(defn skipped-tests []
-  (filter (fn [t] (and (not (configuration? t))
-                      (skipped? t)))
-          (keys @*reports*)))
+(def configuration? (comp boolean :configuration key))
 
-(defn passed-tests []
-  (filter (fn [t] (and (not (configuration? t))
-                            (= (result t) :pass))) (keys @*reports*)))
+(defn passed? [testentry]
+  (= (result testentry) :pass))
 
-(defn failed? [t]
-  (= (result t) :fail))
+(defn skipped? [testentry]
+  (= (result testentry) :skip))
 
-(defn failed-tests []
-  (filter failed? (keys @*reports*)))
+(defn failed? [testentry]
+  (= (result testentry) :fail))
 
-(defn execution-time [test]
-  (let [r (report test)
+(defn execution-time [testentry]
+  (let [r (test-report testentry)
         start (r :start-time)
         end (r :end-time)]
     (if (and start end)
       (/ (- end start) 1000.0)
       0)))
 
-(defn total-time []
-  (reduce + (map execution-time (keys @*reports*))))
+;; Other functions
+
+(defn test-passed?
+  "Given a reference to reports, wait for test to complete (if not
+  already) and return whether it passed."
+  [report-ref test]
+  (-> report-ref deref (get test) :promise deref)
+  (-> report-ref deref (get test) :report :result (= :pass)))
+
+(defn total-time [report]
+  (reduce + (map execution-time report)))
 
 
-(defn blocker-report []
-  (->> *reports*
-     deref
-     vals
+(defn blocker-report [report]
+  (->> vals
      (mapcat #(get-in % [:report :blocked-by]))
      (filter #(not (nil? %)))
      frequencies))
@@ -84,35 +76,48 @@
           (thread t)
           (-> t error :message))) 
 
+;; Functions for grouping report mapentries - where test is key and
+;; testreport is the value
+
+(def test-or-config (comp configuration? key))
+
+(def result (comp :result :report val))
+
+(def testgroup (comp :groups key))
+
+;; Functions for generating specific format of report
+
 (defn junit-report "Produce an xml report consistent with the
                     junit report schema.  Tries to be especially
                     compatible with Jenkins and ReportNG."
-  []
-  (let [fails (failed-tests)
-        skips (skipped-tests)
-        passes (passed-tests)
+  [report]
+  (let [by-result (group-by result report)
+        fails (by-result :fail)
+        skips (by-result :skip)
+        passes (by-result :pass)
         [numfail numskip numpass] (map count [fails skips passes])
         total (+ numfail numskip numpass)
-        info (fn [t] {:name (let [p (:parameters t)]
-                             (if p (pr-str p) (:name t)))
-                     :time (execution-time t)
-                     :classname (:name t)})]
+        info (fn [[t :as e]]
+               {:name (let [p (:parameters t)]
+                        (if p (pr-str p) (:name t)))
+                :time (execution-time e)
+                :classname (:name t)})]
     (binding [xml/*prxml-indent* 2]
       (xml/prxml [:decl! {:version "1.0"} ]
                  [:testsuite {:tests (str total)
                               :failures (str numfail)
                               :errors "0"
                               :skipped (str numskip)
-                              :time (str (total-time))}
+                              :time (str (total-time report))}
                   (concat (for [fail fails]
-                            [:testcase (info fail)
-                             (let [err (error fail)
-                                   obj (:object err)]
-                               [:failure {:type (or (:type obj)
-                                                    (-> obj .getClass .getName))
-                                          :time (execution-time fail)
-                                          :message (format-exception-msg fail)}
-                                [:cdata! (-> fail error exception pst-str)]])])
+                            (do (println fail) [:testcase (info fail)
+                                    (let [err (error fail)
+                                          obj (:object err)]
+                                      [:failure {:type (or (:type obj)
+                                                           (-> obj .getClass .getName))
+                                                 :time (execution-time fail)
+                                                 :message (format-exception-msg fail)}
+                                       [:cdata! (-> fail error exception pst-str)]])]))
                           (for [skip skips]
                             (let [reason (blocked-by skip)]
                               [:testcase (info skip)
@@ -142,7 +147,7 @@
               s))))
 
 
-(def plain-text identity )
+(def plain-text identity)
 
 ;;a rebindable function to do syntax highlighting on some code/data in
 ;;a report.  Should take text and return the syntaxhighlighted html
@@ -152,27 +157,29 @@
 (defn testng-report "Produce an xml report consistent with the
                     testng report schema.  Tries to be especially
                     compatible with Jenkins."
-  []
-  (let [fails (failed-tests)
-        skips (skipped-tests)
-        passes (passed-tests)
+  [report]
+  (let [by-result (group-by result report)
+        fails (by-result :fail)
+        skips (by-result :skip)
+        passes (by-result :pass)
         [numfail numskip numpass] (map count [fails skips passes])
         total (+ numfail numskip numpass)
-        grouped-by-class (group-by :groups (keys @*reports*))
+        by-class (group-by testgroup report)
         to-ms-str #(-> (* % 1000) Math/round str)
-        suite-duration-ms (to-ms-str (total-time))
+        suite-duration-ms (to-ms-str (total-time report))
         date-format (fn [unixdate] (.format testng-dateformat (java.util.Date. unixdate)))
-        info (fn [t tr] (merge {:name (:name t)
-                               :duration-ms (to-ms-str (execution-time t))
-                               :status (cond (skipped? t) "SKIP"
-                                             (passed? t) "PASS"
-                                             (failed? t) "FAIL")
-                               :signature (try (format "%s%s" (:name t) (-> t :steps second))
-                                               (catch Exception e "sig"))
-                               :started-at (date-format (:start-time tr))
-                               :finished-at (date-format (:end-time tr))
-                               :description (or (:description t) "")}
-                              (when (:configuration t) {:is-config "true"})))]   
+        info (fn [[t tr :as e]] 
+               (merge {:name (:name t)
+                       :duration-ms (to-ms-str (execution-time e))
+                       :status (cond (skipped? e) "SKIP"
+                                     (passed? e) "PASS"
+                                     (failed? e) "FAIL")
+                       :signature (try (format "%s%s" (:name t) (-> t :steps second))
+                                       (catch Exception _ "sig"))
+                       :started-at (date-format (-> tr :report :start-time))
+                       :finished-at (date-format (-> tr :report :end-time))
+                       :description (or (:description t) "")}
+                      (when (:configuration t) {:is-config "true"})))]   
     (binding [xml/*prxml-indent* 2]
       (xml/prxml [:decl! {:version "1.0"} ]
                  [:testng-results {:total (str total)
@@ -186,31 +193,30 @@
                            :duration-ms suite-duration-ms
                            :started-at (date-format (System/currentTimeMillis))
                            :finished-at (date-format (System/currentTimeMillis))} ;;need real values here
-                    (for [[groups methods] grouped-by-class]
+                    (for [[groups method-entries] by-class]
                       [:class {:name (apply str (interpose "."
                                                            (or
                                                             (-> groups reverse vec (conj (first groups)))
                                                             ["rootClass"])))}
-                       (for [method methods]
-                         (let [tr (:report (@*reports* method))]
-                           [:test-method (info method tr)
-                            (when (skipped? method)
-                              [:exception {:class "Skipped"}
-                               [:message [:cdata! (format "Blocked by: %s"
-                                                          (pr-str (:blocked-by tr)))]]
-                               [:short-stacktrace [:cdata! "Skips are not errors, no stacktrace."]]])
-                            (when (failed? method)
-                              (let [err (-> method error (dissoc :stack-trace)) 
-                                    e (exception err)
-                                    msg (format-exception-msg method)
-                                    pretty-st (pst-str e)
-                                    not-empty (fn [s] (and s (-> s .length (> 0))))]
-                                (when (every? not-empty [msg pretty-st])
-                                  [:exception {:class (-> e .getClass str)}
-                                   [:message [:cdata!
-                                              (->> err pprint with-out-str syntax-highlight)]]
-                                   [:short-stacktrace [:cdata! pretty-st]]])))
-                            (if-let [params (:parameters tr)] 
-                              [:params (map (fn [i p] [:param {:index i}
-                                                      [:value [:cdata! (pr-str p)]]])
-                                            (iterate inc 0) params)])]))])]]]))))
+                       (for [method-entry method-entries]
+                         [:test-method (info method-entry)
+                          (when (skipped? method-entry)
+                            [:exception {:class "Skipped"}
+                             [:message [:cdata! (format "Blocked by: %s"
+                                                        (-> method-entry val :blocked-by pr-str))]]
+                             [:short-stacktrace [:cdata! "Skips are not errors, no stacktrace."]]])
+                          (when (failed? method-entry)
+                            (let [err (-> method-entry error (dissoc :stack-trace)) 
+                                  e (exception err)
+                                  msg (format-exception-msg method-entry)
+                                  pretty-st (pst-str e)
+                                  not-empty (fn [s] (and s (-> s .length (> 0))))]
+                              (when (every? not-empty [msg pretty-st])
+                                [:exception {:class (-> e .getClass str)}
+                                 [:message [:cdata!
+                                            (->> err pprint with-out-str syntax-highlight)]]
+                                 [:short-stacktrace [:cdata! pretty-st]]])))
+                          (if-let [params (realized-parameters method-entry)] 
+                            [:params (map (fn [i p] [:param {:index i}
+                                                    [:value [:cdata! (pr-str p)]]])
+                                          (iterate inc 0) params)])])])]]]))))
