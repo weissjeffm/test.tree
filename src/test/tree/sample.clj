@@ -11,6 +11,7 @@
                         :more [{:name "create a widget"
                                 :steps (fn [] (Thread/sleep 300) (println "widget created") (throw (Exception. "woops"))) }
                                {:name "create a sprocket"
+                                :configuration true
                                 :steps (fn [] (Thread/sleep 500) (println (str "sprocket created " myvar )))
                                 :more [{:name "send a sprocket via email"
                                         :steps (fn [] (Thread/sleep 400) (println "sent sprocket"))}]}
@@ -36,14 +37,13 @@
                                        {:name "do that4"
                                         :steps (fn [] (Thread/sleep 400) (println (str "there2.4 " myvar)))}
                                        {:name "do that5"
-                                        :blockers (builder/filter-tests (every-pred (builder/named? ["delete a frob"])
-                                                                          (complement reporter/passed?)))
+                                        :blockers (builder/blocking-tests "delete a frob")
                                         :steps (fn [] (Thread/sleep 400) (println "there2.5"))}
                                        {:name "do that6"
-                                        :blockers (builder/filter-tests (every-pred (builder/named?  ["final"]) (complement reporter/passed?)))
+                                        :blockers (builder/blocking-tests "final")
                                         :steps (fn [] (Thread/sleep 400) (println (str "there2.6 " myvar)))}
                                        {:name "do that7"
-                                        :blockers (builder/filter-tests (every-pred (builder/named? ["do that2"]) (complement reporter/passed?)))
+                                        :blockers (builder/blocking-tests "do that2")
                                         :steps (fn [] (Thread/sleep 400) (println "there2.7"))
                                         :more (builder/data-driven {:name "do datadriven"
                                                                     :steps
