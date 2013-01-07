@@ -152,34 +152,34 @@
   "Runs all tests in the tree, in parallel (if threads are set >1).
    Returns a two-element list containing the worker threads and test 
    reports data."
-  [tree & [testrun-name]]
-  (let [thread-runner (or (-> tree meta :thread-runner) identity)
-        setup (or (-> tree meta :setup) (constantly nil))
-        teardown (or (-> tree meta :teardown) (constantly nil))
-        numthreads (or (-> tree meta :threads) 1)
-        testrun-queue (LinkedBlockingQueue.)
+  [tree & [{:keys [thread-runner setup teardown threads watchers]
+            :or {thread-runner identity
+                 setup (constantly nil)
+                 teardown (constantly nil)
+                 threads 1
+                 watchers {}}}]]
+  (let [testrun-queue (LinkedBlockingQueue.)
         testrun-state (atom :not-started)
-        threads (for [agentnum (range numthreads)]
-                  (Thread. (-> (partial consume testrun-queue testrun-state)
-                              thread-runner)
-                           (str "test.tree-thread" agentnum)))
-        watchers (or (-> tree meta :watchers) {})
+        thread-pool (for [agentnum (range threads)]
+                      (Thread. (-> (partial consume testrun-queue testrun-state)
+                                  thread-runner)
+                               (str "test.tree-thread" agentnum)))
         test-tree-zip (tz/test-zip tree)
         reports (reporter/init-reports test-tree-zip)]
 
     ;;start worker threads
-    (doseq [thread threads] (.start thread))
+    (doseq [thread thread-pool] (.start thread))
     
     ;;watch reports
     (doseq [[k v] watchers]
       (add-watch reports k v))
 
     (let [end-wait (future ;when all reports are done, raise 'done' flag
-                           ;and do teardown
+                                        ;and do teardown
                      (while (= (state threads reports) :running)
                        (Thread/sleep 250))
-                     ;signal the threads to stop waiting for new
-                     ;tests
+                                        ;signal the threads to stop waiting for new
+                                        ;tests
                      (reset! testrun-state :finished)
                      (teardown)
                      reports)]
@@ -225,8 +225,8 @@
                  junit report file to the current directory, and a
                  clojure data file with all the results.  If you want
                  to just run the tests without blocking, see 'run'."
-  [tree & [testrun-name]]
-  (let [[threads reports] (run tree testrun-name)]
+  [tree & [opts]]
+  (let [[threads reports] (run tree opts)]
     (wait-for-all-test-results threads reports)
     (spit "report.clj"
           (with-out-str

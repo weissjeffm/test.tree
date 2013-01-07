@@ -5,10 +5,6 @@
   (:use clojure.pprint 
         [clj-stacktrace.repl :only [pst-str]]))
 
-(def ^:dynamic *reports* nil) ;meant to be rebound by threads running particular
-                    ;suites - each thread won't necessarily be running
-                    ;the same suite or using the same reports
-                    
 (defn init-reports [z]
   (ref (zipmap (test.tree.zip/nodes z)
                (repeatedly (fn [] {:status :waiting
