@@ -37,13 +37,13 @@
                                        {:name "do that4"
                                         :steps (fn [] (Thread/sleep 400) (println (str "there2.4 " myvar)))}
                                        {:name "do that5"
-                                        :blockers (builder/blocking-tests ["delete a frob"])
+                                        :blockers (builder/blocking-tests "delete a frob")
                                         :steps (fn [] (Thread/sleep 400) (println "there2.5"))}
                                        {:name "do that6"
-                                        :blockers (builder/blocking-tests ["final"])
+                                        :blockers (builder/blocking-tests "final")
                                         :steps (fn [] (Thread/sleep 400) (println (str "there2.6 " myvar)))}
                                        {:name "do that7"
-                                        :blockers (builder/blocking-tests ["do that2"])
+                                        :blockers (builder/blocking-tests "do that2")
                                         :steps (fn [] (Thread/sleep 400) (println "there2.7"))
                                         :more (builder/data-driven {:name "do datadriven"
                                                                     :steps

@@ -111,7 +111,8 @@
   [& names]
   (fn [m]
     (map reporter/blocking-test
-         ((filter-tests (every-pred (named? names) (complement passed?)))
+         ((filter-tests (every-pred (named? names)
+                                    (complement (partial reporter/test-passed? (:reports m)))))
           (:test-zipper m)))))
 
 (defn before-test "Run f before the steps of test node n" [f n]
@@ -137,9 +138,9 @@
   (run-after (complement :configuration) f n))
 
 (defn wait-for-tree [tree]
-  (fn [_]
+  (fn [m]
     (doseq [t (nodes (tz/test-zip tree))]
-           (reporter/test-passed? t))
+           (reporter/test-passed? (:reports m) t))
     []))
 
 (defn before-all [t n]
