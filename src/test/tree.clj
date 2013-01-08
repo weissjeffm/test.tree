@@ -205,14 +205,17 @@
 (defonce print-method-orig-ideref (get-method print-method clojure.lang.IDeref))
 
 (defn print-quoted [f o w]
-  (.write w "\"")
-  (f o w)
-  (.write w "\""))
+  (clojure.lang.RT/print (str "#<" o ">") w))
 
+(defn print-ideref [f o w]
+  (clojure.lang.RT/print (str
+                          (if (and (instance? clojure.lang.IPending o) (not (.isRealized o)))
+                                            :pending
+                                            @o)) w))
 
 (defmethod print-method clojure.lang.IDeref [o ^java.io.Writer w]
   (if *print-all-readably*
-    (print-quoted print-method-orig-ideref o w)
+    (print-ideref print-method-orig-ideref o w)
     (print-method-orig-ideref o w)))
 
 (defmethod print-method Object [o, ^java.io.Writer w]
