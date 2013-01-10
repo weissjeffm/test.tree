@@ -72,7 +72,7 @@
 
 (defn filter-tests [pred]
   (fn [z]
-    (filter pred (-> z zip/root tz/test-zip tz/nodes))))
+    (filter pred (-> z zip/root tz/test-zip tznodes))))
 
 (defn combine-with
   "combines two thunks into one, using given combinator-fn, and combine

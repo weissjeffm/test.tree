@@ -150,9 +150,10 @@
                    (recur (state threads reports)))))) 
 (defn run
   "Runs all tests in the tree, in parallel (if threads are set >1).
-   Returns a two-element list containing the worker threads and test 
-   reports data."
-  [tree & [{:keys [thread-runner setup teardown threads watchers]
+   Returns a two-element list containing the worker threads and ref to
+   test reports data."
+  [tree & [{:keys [thread-runner setup teardown
+                   threads watchers reports-ref]
             :or {thread-runner identity
                  setup (constantly nil)
                  teardown (constantly nil)
@@ -165,7 +166,10 @@
                                   thread-runner)
                                (str "test.tree-thread" agentnum)))
         test-tree-zip (tz/test-zip tree)
-        reports (reporter/init-reports test-tree-zip)]
+        reports (let [empty-reports (reporter/init-reports test-tree-zip)]
+                  (if reports-ref
+                    (reset! reports-ref empty-reports)
+                    (ref empty-reports)))]
 
     ;;start worker threads
     (doseq [thread thread-pool] (.start thread))
@@ -231,16 +235,12 @@
   [tree & [opts]]
   (let [[threads reports] (run tree opts)]
     (wait-for-all-test-results threads reports)
-    (spit "report.clj"
-          (with-out-str
-            (binding [pprint/*print-right-margin* 120
-                      pprint/*print-suppress-namespaces* true
-                      pprint/*print-miser-width* 80
-                      *print-length* nil
-                      *print-level* nil
-                      *print-all-readably* true]
-              (pr (list tree @reports)))))
     (binding [*print-all-readably* true]
+      (spit "report.clj"
+            (with-out-str
+              (binding [*print-length* nil
+                        *print-level* nil]
+                (pr (list tree @reports)))))
       (redir [*out* (java.io.FileWriter. "testng-report.xml")]
              (reporter/testng-report @reports))
       (redir [*out* (java.io.FileWriter. "junitreport.xml")]

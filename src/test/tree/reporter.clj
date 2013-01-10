@@ -6,9 +6,9 @@
         [clj-stacktrace.repl :only [pst-str]]))
 
 (defn init-reports [z]
-  (ref (zipmap (test.tree.zip/nodes z)
-               (repeatedly (fn [] {:status :waiting
-                                  :report (promise)})))))
+  (zipmap (test.tree.zip/nodes z)
+          (repeatedly (fn [] {:status :waiting
+                             :report (promise)}))))
 
 (defmulti exception :wrapper)
 (defmethod exception nil [e] (:object e))
@@ -72,7 +72,7 @@
   (->> report
      vals
      (mapcat #(-> % :report deref :blocked-by))
-     (filter #(not (nil? %)))
+     (filter (complement nil?))
      frequencies))
 
 (defn- format-exception-msg [t]
