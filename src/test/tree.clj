@@ -168,7 +168,7 @@
         test-tree-zip (tz/test-zip tree)
         reports (let [empty-reports (reporter/init-reports test-tree-zip)]
                   (if reports-ref
-                    (reset! reports-ref empty-reports)
+                    (dosync (ref-set reports-ref empty-reports) reports-ref)
                     (ref empty-reports)))]
 
     ;;start worker threads
