@@ -1,14 +1,29 @@
 (ns test.tree.zip
-  (:require [clojure.zip :as zip]))
+  (:require [test.tree :as tree]
+            [clojure.zip :as zip]))
 
 (defn test-zip "Create a clojure.zip structure so the tree can be
-                easily walked."
+                easily walked. Also validates the tree structure."
   [tree]
   (zip/zipper (constantly true)
               :more 
               (fn [node children]
                 (with-meta (conj node {:more (vec children)}) (meta node)))
               tree))
+
+(defn tmap "Does a depth-first walk of the tree, passes each node thru
+            f, and returns the tree"
+  [f tree]
+  (let [walk-fn #(-> % (zip/edit f) zip/next)]
+    (->> tree
+       test-zip
+       (iterate walk-fn)
+       (drop-while (complement zip/end?))
+       first
+       zip/root)))
+
+(defn validate [tree]
+  (tmap tree/new-test tree))
 
 (defn plain-node [m]
   (dissoc m :more))

@@ -1,7 +1,7 @@
 (ns test.tree.sample
   (:use slingshot.slingshot)
   (:require (test.tree [builder :as builder]
-                       [watcher :as watcher]
+                      ;; [watcher :as watcher]
                        [reporter :as reporter])))
 
 (def myvar "maindef")
@@ -30,7 +30,7 @@
                                       (throw (Exception. "woops, frob could not be deleted."))
                                       (println "frob deleted"))
                              :more [{:name "undelete a frob"
-                                     :steps (fn [] (Thread/sleep 200 (println "frob undeleted.")))}]}
+                                     :steps (fn [] (Thread/sleep 200) (println "frob undeleted."))}]}
                             {:name "make sure 2 frobs can't have the same name"
                              :steps (fn [] (Thread/sleep 400) (println "2nd frob rejected"))}
 
@@ -58,9 +58,9 @@
                              :steps (fn [] (Thread/sleep 400) (println "there4.1"))}]}]}
                                           ;:thread-runner (fn [c] (throw (Exception. "waah")))
   )
-
-(def options {:threads 4
-              :watchers {:stdout watcher/stdout-log-watcher
-                         ;; :logs log-watcher
-                         :onfail (watcher/on-fail
-                                  (fn [t r] (println (format "Test %s failed!" (:name t)))))}})
+(comment
+ (def options {:threads 4
+               :watchers {:stdout watcher/stdout-log-watcher
+                          ;; :logs log-watcher
+                          :onfail (watcher/on-fail
+                                   (fn [t r] (println (format "Test %s failed!" (:name t)))))}}))

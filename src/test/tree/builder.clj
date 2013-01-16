@@ -23,20 +23,8 @@
   java.lang.Object
   (realize [t] t))
 
-
-(defn tmap "Does a depth-first walk of the tree, passes each node thru
-            f, and returns the tree"
-  [f tree]
-  (let [walk-fn #(-> % (zip/edit f) zip/next)]
-    (->> tree
-       tz/test-zip
-       (iterate walk-fn)
-       (drop-while (complement zip/end?))
-       first
-       zip/root)))
-
 (defn alter-nodes-matching [pred f tree]
-  (tmap (fn [n] ((if (pred n) f identity) n))
+  (tz/tmap (fn [n] ((if (pred n) f identity) n))
         tree))
 
 (defn data-driven "Generate a set of n data-driven tests. The first
