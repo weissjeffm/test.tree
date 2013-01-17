@@ -84,9 +84,10 @@
   [report-ref test]
   (let [test-result #(-> report-ref deref (get test) result outcome)]
     (loop [r (test-result)]
-      (if r (= r pass)
-          (recur (do (Thread/sleep 100)
-                     (test-result)))))) ;;there's probably a better way to do this than polling
+      (if r
+        (= r pass)
+        (recur (do (Thread/sleep 100)
+                   (test-result)))))) ;;there's probably a better way to do this than polling
   )
 
 (defn total-time [report]

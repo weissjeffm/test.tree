@@ -5,7 +5,7 @@
             [test.tree :as tree]
             (test.tree [zip :as tz]
                        [builder :as build]
-                       [reporter :as reporter]))
+                       [reporter :as r]))
   (:import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
@@ -16,9 +16,9 @@
   ;; entry from the :test map.
   (let [steps (or steps (:steps test))]
     (try+ {:returned (steps)            ;test fn is called here
-           reporter/outcome :pass}
-          (catch Object _ {reporter/outcome :fail
-                           :reporter/error &throw-context}))))
+           r/outcome r/pass}
+          (catch Object _ {r/outcome r/fail,
+                           r/error &throw-context}))))
 
 
 (defn wrap-data-driven [runner]
@@ -29,15 +29,15 @@
            (assoc :steps (with-meta (fn [] (apply steps realized-params))
                            (meta steps)))
            runner
-           (assoc :reporter/parameters realized-params)))
+           (assoc :r/parameters realized-params)))
       (runner req))))
 
 (defn wrap-blockers [runner]
   (fn [{{:keys [always-run]} :test blocked-by :blocked-by :as req}]
     (let [blocked? (-> blocked-by (or []) count (> 0))]
       (if (and blocked? (not always-run))
-        {reporter/outcome :skip
-         :reporter/blocked-by blocked-by}
+        {r/outcome r/skip,
+         r/blocked-by blocked-by}
         (runner req)))))
 
 (defn wrap-timer [runner]
@@ -55,7 +55,7 @@
        :doc "A rebindable test runner to allow extensibility. The
              runner will be a function of one arg - a request map
              like:
-                 {:reporter/blocked-by ['myblocker']
+                 {r/blocked-by ['myblocker']
                   :test { test data here ... } and returns a map of
              results. See test.tree.reports for contracts that the
              results should adhere to."}
@@ -72,27 +72,26 @@
                       test)"
   [test-tree-zip reports]
   (let [parent (-?> test-tree-zip zip/up zip/node tz/plain-node)]
-    (if (and parent (not (reporter/test-passed? reports parent)))
+    (if (and parent (not (r/test-passed? reports parent)))
       ;;only list the name and parameters of a blocking test
-      [(reporter/blocking-test parent)]
+      [(tree/blocking-test parent)]
       [])))
 
 (declare queue)
 
 (defn run-test [test-tree-zip testrun-queue reports blockers]
-  (let [this-test (-> test-tree-zip zip/node tz/plain-node)]
-    (try (let [all-blockers (concat blockers (parent-blocker test-tree-zip reports))]
-           (dosync (commute reports update-in [this-test]
-                            assoc reporter/status :running))
-           (let [result (try
-                          (runner {:test this-test :reporter/blocked-by all-blockers})
-                          (catch Exception e
-                            (println "result delivered with error: "  (:name this-test) ": " e)
-                            (.printStackTrace e)
-                            e))]
-             (dosync (commute reports update-in [this-test] assoc
-                              reporter/status :done,
-                              reporter/result result))))))
+  (let [this-test (-> test-tree-zip zip/node tz/plain-node)
+        all-blockers (concat blockers (parent-blocker test-tree-zip reports))]
+    (dosync (commute reports update-in [this-test]
+                     assoc r/status :running))
+    (let [result (try (runner {:test this-test :blocked-by all-blockers})
+                      (catch Exception e
+                        (println "result delivered with error: "  (:name this-test) ": " e)
+                        (.printStackTrace e)
+                        e))]
+      (dosync (commute reports update-in [this-test] assoc
+                       r/status :done,
+                       r/result result))))
   (doseq [child-test (tz/child-locs test-tree-zip)]
     (queue child-test testrun-queue reports)))
 
@@ -119,7 +118,7 @@
                         (catch Exception e [e]))]
       (.offer testrun-queue (fn [] (run-test test-tree-zip testrun-queue reports blockers)))
       (dosync
-       (alter reports assoc-in [(-> test-tree-zip zip/node tz/plain-node) reporter/status] :queued)))))
+       (alter reports assoc-in [(-> test-tree-zip zip/node tz/plain-node) r/status] :queued)))))
 
 (defn live? "is the thread alive (not terminated?)"
   [t]
@@ -130,7 +129,7 @@
    not yet delivered, tests are still running."
   [threads reports]
   (let [living-threads (some live? threads)
-        unrun-tests (some (complement (partial = :done)) (map reporter/status (vals @reports)))]
+        unrun-tests (some (complement (partial = :done)) (map r/status (vals @reports)))]
     (cond (and living-threads unrun-tests) :running
           (not unrun-tests) :finished
           :else :deadlocked)))
@@ -165,7 +164,7 @@
                                   thread-runner)
                                (str "test.tree-thread" agentnum)))
         test-tree-zip (tz/test-zip tree)
-        reports (let [empty-reports (reporter/init-reports test-tree-zip)]
+        reports (let [empty-reports (r/init-reports test-tree-zip)]
                   (if reports-ref
                     (dosync (ref-set reports-ref empty-reports) reports-ref)
                     (ref empty-reports)))]
@@ -211,7 +210,7 @@
                         *print-level* nil]
                 (pr (list tree @reports)))))
       (redir [*out* (java.io.FileWriter. "testng-report.xml")]
-             (reporter/testng-report @reports))
+             (r/testng-report @reports))
       (redir [*out* (java.io.FileWriter. "junitreport.xml")]
-             (reporter/junit-report @reports)))
+             (r/junit-report @reports)))
     @reports))
