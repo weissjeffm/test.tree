@@ -147,8 +147,21 @@ Options can be placed inside deftest or defgroup, after the name.
    or that you've disabled it temporarily. The type of each item
    returned by the function is up to you - whatever you would want to
    see to explain why a test was skipped. Generally strings or
-   keywords work well. This callback function will receive one
-   argument - a map: 
+   keywords work well. 
+
+   Example:
+
+
+```clj
+(deftest "my test"
+   :blockers (fn [_] (my.bugtracker.client/is-bug-still-open? "bug654321"))
+   
+   (my-step1)
+   (my-step2))
+```
+
+   This callback function will receive one argument - a map: 
+
 ```clj
 {:test-zipper #<A zipper structure, with the "current" location set to the test being run>
  :reports #<A ref to the reports of the entire test run>
@@ -159,6 +172,8 @@ Options can be placed inside deftest or defgroup, after the name.
    a test should be blocked or not.  For example, it may depend on
    another test that is not the direct parent.  If you don't need any
    of this information, you can just ignore the argument.
+
+
     
 * *:group-setup* - defgroup only.  Before any test in the group is
   run, run the given no-arg function.  
@@ -185,13 +200,24 @@ Options can be placed inside deftest or defgroup, after the name.
   *after* each and every test, and the teardown will always be run,
   even if the test fails.
 
+* *:test-wrapper* - defgroup only.  If your test setup creates
+   resources that the teardown needs to destroy or otherwise refer to,
+   you can use a test-wrapper.  It's a function that will take the
+   test steps function as its first argument, and all the arguments to
+   the test function (if any).  It has to do whatever setup is needed,
+   call the function with the args, and then do whatever teardown is
+   needed.
 
 ```clj
-(deftest "my test"
-   :blockers (fn [_] (my.bugtracker.client/is-bug-still-open? "bug654321"))
+(defgroup recorded-tests
+   :test-wrapper (fn [f & args] 
+                   (let [rec (calc.test/new-screen-recorder)]
+                     (.start rec)
+                     (apply f args)
+                     (.stop rec)))
    
-   (my-step1)
-   (my-step2))
+   (deftest ... )
+   (deftest ... ) ... )  
 ```
 * *:always-run* - if set to logical true, run this test even if
   its parent did not pass. It will still be guaranteed to run

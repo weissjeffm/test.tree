@@ -95,6 +95,12 @@
                           (fn [& args]
                             (try (apply f args) (finally (apply g args)))))))
 
+(defn wrap
+  "wraps f with g (where g takes two arguments, f and args, and
+   presumably calls f with the args at some point.) "
+  [f g]
+  (partial g f))
+
 (defn union
   "Takes the given functions and returns a new function. When that
    function is called, it calls all the original functions and
@@ -115,13 +121,20 @@
                                     (complement (partial reporter/test-passed? (:reports m)))))
           (:test-zipper m)))))
 
-(defn before-test "Run f before the steps of test node n" [f n]
+(defn before-test "Run f before the steps of test node n"
+  [f n]
   (let [s (:steps n)]
     (assoc n :steps (combine f s))))
 
-(defn after-test "Run f in a finally block, after the steps of test node n" [f n]
+(defn after-test "Run f in a finally block, after the steps of test node n"
+  [f n]
   (let [s (:steps n)]
     (assoc n :steps (combine-finally s f))))
+
+(defn with-test "Call f, passing it the steps function of test node n"
+  [f n]
+  (let [s (:steps n)]
+    (assoc n :steps (combine-with wrap s f))))
 
 (defn run-before "Run f before every test that matches pred"
   [pred f tree]
@@ -131,11 +144,16 @@
   [pred f tree]
   (alter-nodes-matching pred (partial after-test f) tree))
 
+(defn run-wrapping "Run f as a wrapper for every test that matches pred."
+  [pred f tree]
+  (alter-nodes-matching pred (partial with-test f) tree))
+
 (defn before-each [f n]
   (run-before (complement :configuration) f n))
 
 (defn after-each [f n]
   (run-after (complement :configuration) f n))
+
 
 (defn wait-for-tree [tree]
   (fn [m]

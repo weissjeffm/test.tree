@@ -1,5 +1,5 @@
 (ns test.tree.script
-  (:use [test.tree.builder :only [data-driven before-all after-all before-each after-each tmap]]))
+  (:use [test.tree.builder :only [data-driven before-all after-all before-each after-each tmap run-wrapping]]))
 
 (defn split-opts [args]
   "split a list at the first item that's in an even index (zero based)
@@ -68,6 +68,11 @@
     (after-each teardown group)
     group))
 
+(defn add-test-wrapper [group wrapper]
+  (if wrapper 
+    (run-wrapping (constantly true) wrapper group)
+    group))
+
 (defn add-group-setup [group groupname setup blockers]
   (if (and (map? group) (not setup))
     group
@@ -98,6 +103,7 @@
      (add-group-setup groupname (:group-setup opts) (:blockers opts))
      (add-test-setup (:test-setup opts))
      (add-test-teardown (:test-teardown opts))
+     (add-test-wrapper (:test-wrapper opts))
      (add-group-teardown groupname (:group-teardown opts))
      (insert-group-name groupname)))
 
