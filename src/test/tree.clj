@@ -192,10 +192,10 @@
       (queue test-tree-zip testrun-queue reports)
       [threads reports])))
 
-(defmacro redir [[v stream] & body]
-  `(binding [~v ~stream]
-     (try ~@body
-          (finally (.close ~v)))))
+(defmacro redir-out-to-file [file & body]
+  `(with-open [fw# (java.io.FileWriter. ~file)]
+     (binding [*out* fw#]
+       ~@body)))
 
 
 ;; Depending on the value of this var, either print the standard
@@ -236,13 +236,12 @@
   (let [[threads reports] (run tree opts)]
     (wait-for-all-test-results threads reports)
     (binding [*print-all-readably* true]
-      (spit "report.clj"
-            (with-out-str
-              (binding [*print-length* nil
-                        *print-level* nil]
-                (pr (list tree @reports)))))
-      (redir [*out* (java.io.FileWriter. "testng-report.xml")]
-             (reporter/testng-report @reports))
-      (redir [*out* (java.io.FileWriter. "junitreport.xml")]
-             (reporter/junit-report @reports)))
+      (redir-out-to-file "report.clj"
+                         (binding [*print-length* nil
+                                   *print-level* nil]
+                           (pr (list tree @reports))))
+      (redir-out-to-file "testng-report.xml"
+                         (reporter/testng-report @reports))
+      (redir-out-to-file "junitreport.xml"
+                         (reporter/junit-report @reports)))
     @reports))
