@@ -131,7 +131,7 @@
    not yet delivered, tests are still running."
   [threads reports]
   (let [living-threads (some live? threads)
-        unrun-tests (some (complement realized?) (map :promise (vals @reports)))]
+        unrun-tests (some (complement realized?) (map :report (vals @reports)))]
     (cond (and living-threads unrun-tests) :running
           (not unrun-tests) :finished
           :else :deadlocked)))
@@ -180,7 +180,7 @@
 
     (let [end-wait (future ;when all reports are done, raise 'done' flag
                                         ;and do teardown
-                     (while (= (state threads reports) :running)
+                     (while (= (state thread-pool reports) :running)
                        (Thread/sleep 250))
                                         ;signal the threads to stop waiting for new
                                         ;tests
@@ -190,7 +190,7 @@
       (setup)
 
       (queue test-tree-zip testrun-queue reports)
-      [threads reports])))
+      [thread-pool reports])))
 
 (defmacro redir-out-to-file [file & body]
   `(with-open [fw# (java.io.FileWriter. ~file)]

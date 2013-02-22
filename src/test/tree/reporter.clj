@@ -168,8 +168,8 @@
                                      (failed? e) "FAIL")
                        :signature (try (format "%s%s" (:name t) (-> t :steps second))
                                        (catch Exception _ "sig"))
-                       :started-at (date-format (-> tr :report :start-time))
-                       :finished-at (date-format (-> tr :report :end-time))
+                       :started-at (date-format (-> tr :report deref :start-time))
+                       :finished-at (date-format (-> tr :report deref :end-time))
                        :description (or (:description t) "")}
                       (when (:configuration t) {:is-config "true"})))]   
     (binding [xml/*prxml-indent* 2]
