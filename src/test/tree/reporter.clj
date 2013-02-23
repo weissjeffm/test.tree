@@ -105,14 +105,14 @@
                               :skipped (str numskip)
                               :time (str (total-time report))}
                   (concat (for [fail fails]
-                            (do (println fail) [:testcase (info fail)
-                                    (let [err (error fail)
-                                          obj (:object err)]
-                                      [:failure {:type (or (:type obj)
-                                                           (-> obj .getClass .getName))
-                                                 :time (execution-time fail)
-                                                 :message (format-exception-msg fail)}
-                                       [:cdata! (-> fail error exception pst-str)]])]))
+                            [:testcase (info fail)
+                             (let [err (error fail)
+                                   obj (:object err)]
+                               [:failure {:type (or (:type obj)
+                                                    (-> obj .getClass .getName))
+                                          :time (execution-time fail)
+                                          :message (format-exception-msg fail)}
+                                [:cdata! (-> fail error exception pst-str)]])])
                           (for [skip skips]
                             (let [reason (blocked-by skip)]
                               [:testcase (info skip)
@@ -206,7 +206,9 @@
                               (when (every? not-empty [msg pretty-st])
                                 [:exception {:class (-> e .getClass str)}
                                  [:message [:cdata!
-                                            (->> err pprint with-out-str syntax-highlight)]]
+                                            (with-open [sw (java.io.StringWriter.)]
+                                              (pprint err sw)
+                                              (-> sw .toString syntax-highlight))]]
                                  [:short-stacktrace [:cdata! pretty-st]]])))
                           (if-let [params (realized-parameters method-entry)] 
                             [:params (map (fn [i p] [:param {:index i}
