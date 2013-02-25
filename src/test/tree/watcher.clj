@@ -17,7 +17,8 @@
   [f]
   (watch-on-pred (fn [test report]
                    (let [r (:report report)]
-                     (and (realized? r)
+                     (and r
+                          (realized? r)
                           (-> r deref :result (= :fail))
                           (not (configuration? test)))))
                  f))
