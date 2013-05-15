@@ -83,15 +83,13 @@
   (let [this-test (-> test-tree-zip zip/node tz/plain-node)]
     (try (let [all-blockers (concat blockers (parent-blocker test-tree-zip reports))]
            (dosync
-            (alter reports update-in [this-test]
-                   assoc :status :running))
+            (alter reports assoc-in [this-test :status] :running))
            (let [report (runner {:test this-test :blocked-by all-blockers})]
              (dosync
-              (let [updated-reports (alter reports update-in [this-test]
-                                           assoc :status :done)]
-                (deliver (-> updated-reports (get this-test) :report) report)))))
+              (deliver (-> reports deref (get this-test) :lock) :done)
+              (alter reports update-in [this-test] merge {:status :done, :report report}))))
          (catch Exception e
-           (deliver (:report (@reports this-test)) e)
+           (deliver (:lock (@reports this-test)) e)
            (println "report delivered with error: "  (:name this-test) ": " e)
            (.printStackTrace e))))
   (doseq [child-test (tz/child-locs test-tree-zip)]
@@ -131,7 +129,7 @@
    not yet delivered, tests are still running."
   [threads reports]
   (let [living-threads (some live? threads)
-        unrun-tests (some (complement realized?) (map :report (vals @reports)))]
+        unrun-tests (some (complement realized?) (map :lock (vals @reports)))]
     (cond (and living-threads unrun-tests) :running
           (not unrun-tests) :finished
           :else :deadlocked)))

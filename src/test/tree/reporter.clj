@@ -8,7 +8,7 @@
 (defn init-reports [z]
   (zipmap (test.tree.zip/nodes z)
           (repeatedly (fn [] {:status :waiting
-                             :report (promise)}))))
+                              :lock (promise)}))))
 
 (defmulti exception :wrapper)
 (defmethod exception nil [e] (:object e))
@@ -17,7 +17,7 @@
 
 ;; Functions to process testsentries (mapentry of test to report)
 
-(def test-report (comp deref :report val))
+(def test-report (comp :report val))
 
 (def blocked-by (comp :blocked-by test-report))
 
@@ -57,7 +57,7 @@
   "Given a reference to reports, wait for test to complete (if not
   already) and return whether it passed."
   [report-ref test]
-  (-> report-ref deref (get test) :report deref :result (= :pass)))
+  (-> report-ref deref (get test) :report :result (= :pass)))
 
 (defn total-time [report]
   (reduce + (map execution-time report)))
@@ -71,7 +71,7 @@
 (defn blocker-report [report]
   (->> report
      vals
-     (mapcat #(-> % :report deref :blocked-by))
+     (mapcat #(-> % :report :blocked-by))
      (filter (complement nil?))
      frequencies))
 
@@ -168,8 +168,8 @@
                                      (failed? e) "FAIL")
                        :signature (try (format "%s%s" (:name t) (-> t :steps second))
                                        (catch Exception _ "sig"))
-                       :started-at (date-format (-> tr :report deref :start-time))
-                       :finished-at (date-format (-> tr :report deref :end-time))
+                       :started-at (date-format (-> tr :report :start-time))
+                       :finished-at (date-format (-> tr :report :end-time))
                        :description (or (:description t) "")}
                       (when (:configuration t) {:is-config "true"})))]   
     (binding [xml/*prxml-indent* 2]

@@ -17,11 +17,8 @@
   [f]
   (watch-on-pred (fn [test report]
                    (let [r (:report report)]
-                     (and r
-                          (realized? r)
-                          (-> r deref :result (= :fail))
-                          (not (configuration? test)))))
-                 f))
+                     (and r (-> r :result (= :fail)))))
+                 f)) 
 
 (defn status-watcher
   "create a watcher that will call f when a test's :status equals
@@ -41,12 +38,11 @@
     (doseq [[{:keys [name parameters] :as t} {:keys [status]}] added]
       (let [report (-> t new_ :report)
             parms-str (if parameters (pr-str parameters) "")]
-        (if (realized? report)
-          (let [report @report
-                blocked-by (:blocked-by report)
+        (when report
+          (let [blocked-by (:blocked-by report)
                 bb-str (if blocked-by (str "Blockers: " (pr-str blocked-by)) "")
                 exception (or (-> report :error :throwable) "")]
-            (println (apply format "%-12s %s %s   %s%s"
+            (println (apply format "%-12s %s %s   %s%s\n"
                             (map str [(:result report)
                                       name
                                       parms-str
