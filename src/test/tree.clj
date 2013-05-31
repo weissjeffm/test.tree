@@ -225,6 +225,10 @@
     (print-quoted print-method-orig-object o w)
     (print-method-orig-object o w)))
 
+;; Print clojure records with #Foopkg.fooclass{:a "bar"} style
+(defmethod clojure.pprint/simple-dispatch clojure.lang.IRecord [obj] (pr obj))
+(prefer-method clojure.pprint/simple-dispatch clojure.lang.IRecord clojure.lang.IPersistentMap)
+
 (defn run-suite "Run the test tree (blocking until all tests are
                  complete) and return the reports list.  Also writes a
                  junit report file to the current directory, and a
