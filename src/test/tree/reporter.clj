@@ -195,7 +195,7 @@
                           (when (skipped? method-entry)
                             [:exception {:class "Skipped"}
                              [:message [:cdata! (format "Blocked by: %s"
-                                                        (-> method-entry val :blocked-by pr-str))]]
+                                                        (-> method-entry blocked-by pr-str))]]
                              [:short-stacktrace [:cdata! "Skips are not errors, no stacktrace."]]])
                           (when (failed? method-entry)
                             (let [err (-> method-entry error (dissoc :stack-trace)) 
