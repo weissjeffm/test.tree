@@ -131,49 +131,37 @@ Options can be placed inside deftest or defgroup, after the name.
 
 ```clj
 (deftest "my test"
-   :blockers     (constantly ["this test is currently disabled"])
+   :blockers     ["this test is currently disabled"]
    :description  "Runs foobar widget tests."
     
    (my-step1) (my-step2)) 
 ``` 
 
-* *:blockers* - A callback function to determine at runtime if this
-   test should be skipped before it's attempted. If you have a test
-   that's been failing every run and there's nothing further you can
-   do to get it fixed, you may want to block it from being run. That
-   way, it doesn't pollute your test results. If this test should be
-   skipped, this function should return a list of reasons why it was
-   skipped. For example, already-reported bugs, missing dependencies,
-   or that you've disabled it temporarily. The type of each item
-   returned by the function is up to you - whatever you would want to
-   see to explain why a test was skipped. Generally strings or
-   keywords work well. 
+* *:blockers* - A list of items that might be blocking this test.  If
+   you have a test that's been failing every run and there's nothing
+   further you can do to get it fixed, you may want to block it from
+   being run. That way, it doesn't pollute your test results. You can
+   use a simple string or keyword to always block this test (where the
+   string or keyword will show up in a report explaining why it was
+   skipped).  See also the protocol `test.tree.Blocker` - by extending
+   this protocol you can do things like look up bug reports to see if
+   they've been fixed yet, and only block the test if the bug is still
+   open at the time the test is being run.
 
    Example:
 
 
 ```clj
+(extend-type my.bugtracker.Issue
+  test.tree.Blocker
+   (blocks [i _] (when (my.bugtracker/open? i) (list i)))
+   
 (deftest "my test"
-   :blockers (fn [_] (my.bugtracker.client/is-bug-still-open? "bug654321"))
+   :blockers (list (my.bugtracker.Issue. "bugid654321"))
    
    (my-step1)
    (my-step2))
 ```
-
-   This callback function will receive one argument - a map: 
-
-```clj
-{:test-zipper #<A zipper structure, with the "current" location set to the test being run>
- :reports #<A ref to the reports of the entire test run>
-}
-```
-
-   Sometimes you need access to this information to determine whether
-   a test should be blocked or not.  For example, it may depend on
-   another test that is not the direct parent.  If you don't need any
-   of this information, you can just ignore the argument.
-
-
     
 * *:group-setup* - defgroup only.  Before any test in the group is
   run, run the given no-arg function.  

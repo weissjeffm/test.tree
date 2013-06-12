@@ -9,6 +9,32 @@
   (:import (java.util.concurrent Executors ExecutorService Callable ThreadFactory
                                 TimeUnit LinkedBlockingQueue ThreadPoolExecutor )))
 
+(defprotocol Blocker
+  (blockers [x m]
+    "If x blocks the current test, returns a list of blockers, otherwise empty list.
+     m is a map of the state for the current test:
+
+      {:test-zipper #<A zipper structure, with the 'current' location
+                      set to the test being run>
+       :reports #<A ref to the reports of the entire test run>}
+
+     Sometimes you need access to this information to determine
+     whether a test should be blocked or not.  For example, it may
+     depend on another test that is not the direct parent.  If you
+     don't need any of this information, you can just ignore the
+     argument."))
+
+;; default implementation (always a blocker, returns list of one item))
+(extend java.lang.Object
+  Blocker {:blocks list})
+
+;; treat functions as being a function of test state
+;; any other info needs to be closed over.  Function
+;; should return a list of blocking objects
+(extend-type clojure.lang.AFn
+  Blocker (blockers [f m]
+            (f m)))
+
 (defn execute "Executes test, returns either :pass if the test exits
                normally, or exception the test threw."
   [{:keys [steps test]}]
@@ -79,9 +105,9 @@
 
 (declare queue)
 
-(defn run-test [test-tree-zip testrun-queue reports blockers]
+(defn run-test [test-tree-zip testrun-queue reports test-blockers]
   (let [this-test (-> test-tree-zip zip/node tz/plain-node)]
-    (try (let [all-blockers (concat blockers (parent-blocker test-tree-zip reports))]
+    (try (let [all-blockers (concat test-blockers (parent-blocker test-tree-zip reports))]
            (dosync
             (alter reports assoc-in [this-test :status] :running))
            (let [report (runner {:test this-test :blocked-by all-blockers})]
@@ -111,12 +137,12 @@
   (future
     ;; force calculation of blockers so that exceptions will be caught
     ;; here, rather than possibly uncaught where the values are consumed.
-    (let [blockers (try (doall ((or (-> test-tree-zip zip/node :blockers) 
-                                    (constantly [])) ;;default blocker fn returns empty list
-                                {:test-zipper test-tree-zip
-                                 :reports reports}))
-                        (catch Exception e [e]))]
-      (.offer testrun-queue (fn [] (run-test test-tree-zip testrun-queue reports blockers)))
+    (let [test-blockers (try (doall
+                              (mapcat #(blockers % {:test-zipper test-tree-zip
+                                                    :reports reports})
+                                      (-> test-tree-zip zip/node :blockers)))
+                             (catch Exception e [e]))]
+      (.offer testrun-queue (fn [] (run-test test-tree-zip testrun-queue reports test-blockers)))
       (dosync
        (alter reports assoc-in [(-> test-tree-zip zip/node tz/plain-node) :status] :queued)))))
 

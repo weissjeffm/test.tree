@@ -24,7 +24,7 @@
                                                          (fn [n] (-> n
                                                                    (mod 5)
                                                                    (= 0)
-                                                                   (when (throw+ {:type :divisibility :msg "Divisible by 5! Oh noes!"}))))} [[1] [20]  (with-meta (fn [] [7]) {:blockers (fn [_] [:blocker1])})])}
+                                                                   (when (throw+ {:type :divisibility :msg "Divisible by 5! Oh noes!"}))))} [[1] [20]  (with-meta (fn [] [7]) {:blockers (list (fn [_] [:blocker1]))})])}
                             {:name "delete a frob"
                              :steps (fn [] (Thread/sleep 400)
                                       (throw (Exception. "woops, frob could not be deleted."))
@@ -37,13 +37,13 @@
                             {:name "do that4"
                              :steps (fn [] (Thread/sleep 400) (println (str "there2.4 " myvar)))}
                             {:name "do that5"
-                             :blockers (builder/blocking-tests "delete a frob")
+                             :blockers (list (builder/blocking-tests "delete a frob"))
                              :steps (fn [] (Thread/sleep 400) (println "there2.5"))}
                             {:name "do that6"
-                             :blockers (builder/blocking-tests "final")
+                             :blockers (list (builder/blocking-tests "final"))
                              :steps (fn [] (Thread/sleep 400) (println (str "there2.6 " myvar)))}
                             {:name "do that7"
-                             :blockers (builder/blocking-tests "do that2")
+                             :blockers (list (builder/blocking-tests "do that2"))
                              :steps (fn [] (Thread/sleep 400) (println "there2.7"))
                              :more (builder/data-driven {:name "do datadriven"
                                                          :steps
