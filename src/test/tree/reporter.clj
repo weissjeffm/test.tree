@@ -170,7 +170,8 @@
                                        (catch Exception _ "sig"))
                        :started-at (date-format (-> tr :report :start-time))
                        :finished-at (date-format (-> tr :report :end-time))
-                       :description (or (:description t) "")}
+                       :description (or (:description t) "")
+                       :uuid (or (:uuid t) "")}
                       (when (:configuration t) {:is-config "true"})))]   
     (binding [xml/*prxml-indent* 2]
       (xml/prxml [:decl! {:version "1.0"} ]
