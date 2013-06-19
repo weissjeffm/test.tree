@@ -1,5 +1,6 @@
 (ns test.tree.reporter
-  (:require [clojure.prxml :as xml]
+  (:require [hickory.core :as html]
+            [clojure.data.xml :as xml]
             [clojure.set :as sets]
             test.tree.zip)
   (:use clojure.pprint 
@@ -97,49 +98,50 @@
                         (if p (pr-str p) (:name t)))
                 :time (execution-time e)
                 :classname (:name t)})]
-    (binding [xml/*prxml-indent* 2]
-      (xml/prxml [:decl! {:version "1.0"} ]
-                 [:testsuite {:tests (str total)
-                              :failures (str numfail)
-                              :errors "0"
-                              :skipped (str numskip)
-                              :time (str (total-time report))}
-                  (concat (for [fail fails]
-                            [:testcase (info fail)
-                             (let [err (error fail)
-                                   obj (:object err)]
-                               [:failure {:type (or (:type obj)
-                                                    (-> obj .getClass .getName))
-                                          :time (execution-time fail)
-                                          :message (format-exception-msg fail)}
-                                [:cdata! (-> fail error exception pst-str)]])])
-                          (for [skip skips]
-                            (let [reason (blocked-by skip)]
-                              [:testcase (info skip)
-                               [:skipped (if reason
-                                           {:message (format "On thread %s: %s"
-                                                             (thread skip)
-                                                             (str reason))}
-                                           {})]]))
-                          (for [pass passes]
-                            [:testcase (info pass)]))]))))
+    (xml/indent-str
+     (xml/sexp-as-element
+      [:testsuite {:tests (str total)
+                   :failures (str numfail)
+                   :errors "0"
+                   :skipped (str numskip)
+                   :time (str (total-time report))}
+       (concat (for [fail fails]
+                 [:testcase (info fail)
+                  (let [err (error fail)
+                        obj (:object err)]
+                    [:failure {:type (or (:type obj)
+                                         (-> obj .getClass .getName))
+                               :time (execution-time fail)
+                               :message (format-exception-msg fail)}
+                     [:-cdata (-> fail error exception pst-str)]])])
+               (for [skip skips]
+                 (let [reason (blocked-by skip)]
+                   [:testcase (info skip)
+                    [:skipped (if reason
+                                {:message (format "On thread %s: %s"
+                                                  (thread skip)
+                                                  (str reason))}
+                                {})]]))
+               (for [pass passes]
+                 [:testcase (info pass)]))]))))
 
 (def testng-dateformat (java.text.SimpleDateFormat. "yyyy-MM-dd'T'HH:mm:ss'Z'"))
 
 (defn syntax-highlighter [sh-url]
   (fn [s]
     (let [url #(str sh-url %)]
-      (with-out-str (xml/prxml [:script {:type "text/javascript"
-                                         :src (url "scripts/shCore.js")}]
-                               [:script {:type "text/javascript"
-                                         :src (url "scripts/shBrushClojure.js")}]
-                               [:link {:href (url "scripts/shCore.js"), :rel "stylesheet"}]
-                               [:link {:href (url "scripts/shCore.js"), :rel "stylesheet"}]
-                               [:script {:type "text/javascript"} "SyntaxHighlighter.all()"]
-                               [:pre {:class "brush: clj;gutter: false; toolbar: false"} s])))))
+      (str (->>
+            [{:type :element :tag :script :attrs {:type "text/javascript" :src (url "scripts/shCore.js")}}
+             {:type :element :tag :script :attrs {:type "text/javascript" :src (url "scripts/shBrushClojure.js")}}
+             {:type :element :tag :link :attrs {:href (url "styles/shCore.css"), :rel "stylesheet"}}
+             {:type :element :tag :link :attrs {:href (url "styles/shCoreEmacs.css"), :rel "stylesheet"}}
+             {:type :element :tag :script :attrs {:type "text/javascript"} :content ["SyntaxHighlighter.all()"]}
+             {:type :element :tag :pre :attrs {:class "brush: clj;gutter: false; toolbar: false"} :content [s]}]
+            (map html/hickory-to-html)
+            (apply str))))))
 
-(defn preformatted-stack-trace [e]
-  (with-out-str (xml/prxml [:pre (clj-stacktrace.repl/pst-str e)])))
+(defn pre [text]
+  (html/hickory-to-html {:type :element, :tag :pre, :content [text]}))
 
 ;;a rebindable function to do syntax highlighting on some code/data in
 ;;a report.  Should take text and return the syntaxhighlighted html
@@ -173,45 +175,45 @@
                        :description (or (:description t) "")
                        :uuid (or (:uuid t) "")}
                       (when (:configuration t) {:is-config "true"})))]   
-    (binding [xml/*prxml-indent* 2]
-      (xml/prxml [:decl! {:version "1.0"} ]
-                 [:testng-results {:total (str total)
-                                   :failed (str numfail)
-                                   :passed (str numpass)
-                                   :skipped (str numskip)}
-                  [:reporter-output] ;;empty
-                  [:suite {:name "Test Suite"
-                           :duration-ms suite-duration-ms}
-                   [:test {:name "Test Tree"
-                           :duration-ms suite-duration-ms
-                           :started-at (date-format (System/currentTimeMillis))
-                           :finished-at (date-format (System/currentTimeMillis))} ;;need real values here
-                    (for [[groups method-entries] by-class]
-                      [:class {:name (apply str (interpose "."
-                                                           (or
-                                                            (-> groups reverse vec (conj (first groups)))
-                                                            ["rootClass"])))}
-                       (for [method-entry method-entries]
-                         [:test-method (info method-entry)
-                          (when (skipped? method-entry)
-                            [:exception {:class "Skipped"}
-                             [:message [:cdata! (format "Blocked by: %s"
-                                                        (-> method-entry blocked-by pr-str))]]
-                             [:short-stacktrace [:cdata! "Skips are not errors, no stacktrace."]]])
-                          (when (failed? method-entry)
-                            (let [err (-> method-entry error (dissoc :stack-trace)) 
-                                  e (exception err)
-                                  msg (format-exception-msg method-entry)
-                                  pretty-st (preformatted-stack-trace e)
-                                  not-empty (fn [s] (and s (-> s .length (> 0))))]
-                              (when (every? not-empty [msg pretty-st])
-                                [:exception {:class (-> e .getClass str)}
-                                 [:message [:cdata!
-                                            (with-open [sw (java.io.StringWriter.)]
-                                              (pprint err sw)
-                                              (-> sw .toString syntax-highlight))]]
-                                 [:short-stacktrace [:cdata! pretty-st]]])))
-                          (if-let [params (realized-parameters method-entry)] 
-                            [:params (map (fn [i p] [:param {:index i}
-                                                    [:value [:cdata! (pr-str p)]]])
-                                          (iterate inc 0) params)])])])]]]))))
+    (xml/indent-str
+     (xml/sexp-as-element [:testng-results {:total (str total)
+                                            :failed (str numfail)
+                                            :passed (str numpass)
+                                            :skipped (str numskip)}
+                           [:reporter-output] ;;empty
+                           [:suite {:name "Test Suite"
+                                    :duration-ms suite-duration-ms}
+                            [:test {:name "Test Tree"
+                                    :duration-ms suite-duration-ms
+                                    :started-at (date-format (System/currentTimeMillis))
+                                    :finished-at (date-format (System/currentTimeMillis))} ;;need real values here
+                             (for [[groups method-entries] by-class]
+                               [:class {:name (apply str (interpose "."
+                                                                    (or
+                                                                     (-> groups reverse vec (conj (first groups)))
+                                                                     ["rootClass"])))}
+                                (for [method-entry method-entries]
+                                  [:test-method (info method-entry)
+                                   (when (skipped? method-entry)
+                                     [:exception {:class "Skipped"}
+                                      [:message [:-cdata (format "Blocked by: %s"
+                                                                 (-> method-entry blocked-by pr-str))]]
+                                      [:short-stacktrace [:-cdata "Skips are not errors, no stacktrace."]]])
+                                   (when (failed? method-entry)
+                                     (let [err (-> method-entry error (dissoc :stack-trace)) 
+                                           e (exception err)
+                                           msg (format-exception-msg method-entry)
+                                           pretty-st (clj-stacktrace.repl/pst-str e)
+                                           not-empty (fn [s] (and s (-> s .length (> 0))))]
+                                       (when (every? not-empty [msg pretty-st])
+                                         [:exception {:class (-> e .getClass str)}
+                                          [:message [:-cdata
+                                                     (str (with-open [sw (java.io.StringWriter.)]
+                                                            (pprint err sw)
+                                                            (-> sw .toString syntax-highlight))
+                                                          (pre pretty-st))]]
+                                          [:short-stacktrace [:-cdata pretty-st]]])))
+                                   (if-let [params (realized-parameters method-entry)] 
+                                     [:params (map (fn [i p] [:param {:index i}
+                                                              [:value [:-cdata (pr-str p)]]])
+                                                   (iterate inc 0) params)])])])]]]))))

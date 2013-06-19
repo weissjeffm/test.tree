@@ -268,8 +268,6 @@
                          (binding [*print-length* nil
                                    *print-level* nil]
                            (pr (list tree @reports))))
-      (redir-out-to-file "testng-report.xml"
-                         (reporter/testng-report @reports))
-      (redir-out-to-file "junitreport.xml"
-                         (reporter/junit-report @reports)))
+      (spit "testng-report.xml" (reporter/testng-report @reports))
+      (spit "junitreport.xml" (reporter/junit-report @reports)))
     @reports))
