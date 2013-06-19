@@ -129,17 +129,17 @@
 (defn syntax-highlighter [sh-url]
   (fn [s]
     (let [url #(str sh-url %)]
-      (format "<script type=\"text/javascript\" src=\"%s\"></script>
-               <script type=\"text/javascript\" src=\"%s\"></script>
-               <link href=\"%s\" rel=\"stylesheet\"/>
-               <link href=\"%s\" rel=\"stylesheet\"/>
-               <script type=\"text/javascript\">SyntaxHighlighter.all()</script>
-               <pre class=\"brush: clj;gutter: false; toolbar: false\">%s</pre> "
-              (url "scripts/shCore.js")
-              (url "scripts/shBrushClojure.js")
-              (url "styles/shCore.css")
-              (url "styles/shCoreEmacs.css")
-              s))))
+      (with-out-str (xml/prxml [:script {:type "text/javascript"
+                                         :src (url "scripts/shCore.js")}]
+                               [:script {:type "text/javascript"
+                                         :src (url "scripts/shBrushClojure.js")}]
+                               [:link {:href (url "scripts/shCore.js"), :rel "stylesheet"}]
+                               [:link {:href (url "scripts/shCore.js"), :rel "stylesheet"}]
+                               [:script {:type "text/javascript"} "SyntaxHighlighter.all()"]
+                               [:pre {:class "brush: clj;gutter: false; toolbar: false"} s])))))
+
+(defn preformatted-stack-trace [e]
+  (with-out-str (xml/prxml [:pre (clj-stacktrace.repl/pst-str e)])))
 
 ;;a rebindable function to do syntax highlighting on some code/data in
 ;;a report.  Should take text and return the syntaxhighlighted html
@@ -202,7 +202,7 @@
                             (let [err (-> method-entry error (dissoc :stack-trace)) 
                                   e (exception err)
                                   msg (format-exception-msg method-entry)
-                                  pretty-st (pst-str e)
+                                  pretty-st (preformatted-stack-trace e)
                                   not-empty (fn [s] (and s (-> s .length (> 0))))]
                               (when (every? not-empty [msg pretty-st])
                                 [:exception {:class (-> e .getClass str)}
