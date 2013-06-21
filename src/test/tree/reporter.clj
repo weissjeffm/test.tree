@@ -98,7 +98,7 @@
                         (if p (pr-str p) (:name t)))
                 :time (execution-time e)
                 :classname (:name t)})]
-    (xml/indent-str
+    (xml/emit-str
      (xml/sexp-as-element
       [:testsuite {:tests (str total)
                    :failures (str numfail)
@@ -175,7 +175,7 @@
                        :description (or (:description t) "")
                        :uuid (or (:uuid t) "")}
                       (when (:configuration t) {:is-config "true"})))]   
-    (xml/indent-str
+    (xml/emit-str
      (xml/sexp-as-element [:testng-results {:total (str total)
                                             :failed (str numfail)
                                             :passed (str numpass)
