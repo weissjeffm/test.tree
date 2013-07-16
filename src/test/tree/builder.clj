@@ -51,9 +51,6 @@
              (merge (meta data) (meta item))
              (assoc :parameters (if (coll? item) (vec item) item))))))
 
-(defn lazy-literal-seq [coll]
-  (reduce (fn [orig form] `(lazy-seq (cons ~form ~orig))) nil (reverse coll)))
-
 (defn dep-chain "Take a list of tests and nest them as a long tree branch"
   [tests]
   (vector (reduce #(assoc %2 :more [%1]) (reverse tests))))
@@ -96,8 +93,8 @@
                             (try (apply f args) (finally (apply g args)))))))
 
 (defn wrap
-  "wraps f with g (where g takes two arguments, f and args, and
-   presumably calls f with the args at some point.) "
+  "wraps f with g (where g takes multiple arguments, f and remaining
+   args, and presumably calls f with the args at some point.) "
   [f g]
   (partial g f))
 
@@ -185,15 +182,4 @@
       (vector tests)
       tests)))
 
-(defn from-directory [dir] "Create a tree of tests read from a directory. Each clojure source file in the directory should contain a map or multiple maps that contain tests.  The tree will be contructed with empty configuration nodes for directories, with all tests underneath.  Multiple files in the same directory will be treated as if they were one big file."
-  (let [d (File. dir)
-        all (vec (.listFiles d))
-        dirs (filter #(.isDirectory %) all)
-        files (filter #(.isFile %) all)
-        clj-files (filter #(.endsWith (.getName %) ".clj") files)]
-    {:name (.getName d)
-     :configuration true
-     :steps (constantly nil)
-     :more (concat (mapcat #(read-tests (.getCanonicalPath %)) files)
-                   (for [dir dirs]
-                     (from-directory  (.getCanonicalPath dir))))}))
+

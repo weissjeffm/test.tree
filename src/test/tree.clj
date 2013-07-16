@@ -2,7 +2,6 @@
   (:require [clojure.zip :as zip]
             [clojure.pprint :as pprint]
             [slingshot.slingshot :refer [try+]]
-            [clojure.core.incubator :refer [-?>]]
             (test.tree [zip :as tz]
                        [builder :as build]
                        [reporter :as reporter]))
@@ -97,7 +96,7 @@
                       will either be empty or have 1 item, the parent
                       test)"
   [test-tree-zip reports]
-  (let [parent (-?> test-tree-zip zip/up zip/node tz/plain-node)]
+  (let [parent (some-> test-tree-zip zip/up zip/node tz/plain-node)]
     (if (and parent (not (reporter/test-passed? reports parent)))
       ;;only list the name and parameters of a blocking test
       [(reporter/blocking-test parent)]
@@ -176,18 +175,15 @@
   "Runs all tests in the tree, in parallel (if threads are set >1).
    Returns a two-element list containing the worker threads and ref to
    test reports data."
-  [tree & [{:keys [thread-runner setup teardown
-                   threads watchers reports-ref]
-            :or {thread-runner identity
-                 setup (constantly nil)
-                 teardown (constantly nil)
+  [tree & [{:keys [thread-wrapper threads watchers reports-ref]
+            :or {thread-wrapper identity
                  threads 1
                  watchers {}}}]]
   (let [testrun-queue (LinkedBlockingQueue.)
         testrun-state (atom :not-started)
         thread-pool (for [agentnum (range threads)]
                       (Thread. (-> (partial consume testrun-queue testrun-state)
-                                  thread-runner)
+                                   thread-wrapper)
                                (str "test.tree-thread" agentnum)))
         test-tree-zip (tz/test-zip tree)
         reports (let [empty-reports (reporter/init-reports test-tree-zip)]
@@ -201,20 +197,16 @@
     ;;watch reports
     (doseq [[k v] watchers]
       (add-watch reports k v))
+    (future                             ; when all reports are done, raise 'done' flag
+                                        ; and do teardown
+      (while (= (state thread-pool reports) :running)
+        (Thread/sleep 250))             ; signal the threads to stop waiting for new
+                                        ; tests
+      (reset! testrun-state :finished)
+      reports)
 
-    (let [end-wait (future ;when all reports are done, raise 'done' flag
-                                        ;and do teardown
-                     (while (= (state thread-pool reports) :running)
-                       (Thread/sleep 250))
-                                        ;signal the threads to stop waiting for new
-                                        ;tests
-                     (reset! testrun-state :finished)
-                     (teardown)
-                     reports)]
-      (setup)
-
-      (queue test-tree-zip testrun-queue reports)
-      [thread-pool reports])))
+    (queue test-tree-zip testrun-queue reports)
+    [thread-pool reports]))
 
 (defmacro redir-out-to-file [file & body]
   `(with-open [fw# (java.io.FileWriter. ~file)]

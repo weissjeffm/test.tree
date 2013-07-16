@@ -223,12 +223,6 @@ These are configuration options for the entire test run. They are
 passed as an optional map as the 2nd argument to `test.tree/run` or
 `test.tree/run-suite`.
 
-* *:setup* A no-arg function to be called when starting the suite.
-   It's called before any of the worker threads are created.
-
-* *:teardown* A no-arg function to be called after the suite is
-   complete. It's called after all the worker threads have finished.
-
 * *:threads* The number of concurrent threads that will run tests - no
   more than this number of tests will be run simultaneously.
 
@@ -241,7 +235,7 @@ passed as an optional map as the 2nd argument to `test.tree/run` or
    where the keys are the names of the watchers, and the values are
    watch functions like you'd pass to *add-watch*.
 
-* *:thread-runner* (Advanced) If each thread needs to do some
+* *:thread-wrapper* (Advanced) If each thread needs to do some
   setup and teardown (example, opening a browser when it starts,
   and closing it when it ends), specify it here. It's a 1-arg
   function where the body does setup, calls its argument as a
