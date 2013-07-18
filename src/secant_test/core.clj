@@ -3,10 +3,9 @@
             [loom.attr :as attr]
             loom.io
             [loom.alg :as graph-alg]
-            [slingshot.slingshot :refer [try+]]
-            [seesaw.core :as seesaw])
-  (:import [com.mxgraph.view mxGraph ]
-           [com.mxgraph.swing mxGraphComponent]))
+            [slingshot.slingshot :refer [try+]])
+  (:import [java.util.concurrent LinkedBlockingQueue])
+  (:refer-clojure :exclude [partial]))
 
 (defprotocol Testable
   (as-tests [o] "Convert something into a list of tests."))
@@ -14,11 +13,7 @@
 (defprotocol Invokable
   (invoke [o] "Start a procedure or function.")
   (error-check [o] "Check a procedure for obvious errors.")
-  (papply [o args] "Partial application of arguments to a function."))
-
-(defprotocol Queueable
-  (queue [o] [o start] [o start f]
-    "Add an object to a queue (maybe adding multiple items), starting with start value in object."))
+  (partial [o args] "Partial application of arguments to a function."))
 
 (defrecord Test [name description steps parameters]
   Testable
@@ -28,96 +23,60 @@
   (invoke [this]
     (invoke (:steps this)))
   (error-check [this]
-    (error-check (papply (:steps this)
+    (error-check (partial (:steps this)
                          (or (:parameters this) (vector)))))
-  (papply [o args] (assoc o :parameters args)))
+  (partial [o args] (assoc o :parameters args)))
+
+(defrecord Verification [expr target-str pass?])
+
+(def list-invokable-impl
+  {:partial (fn [e lbind] `(let ~lbind
+                            ~e))
+   :invoke (fn [e]
+             (binding [*ns* (or (-> e meta :ns) *ns*)]
+               (eval e)))
+   :error-check (fn [e] (eval `(do (fn [] ~e) nil)))})
+
+(extend clojure.lang.PersistentList Invokable list-invokable-impl)
+(extend clojure.lang.Cons Invokable list-invokable-impl)
+(extend clojure.lang.AFn Invokable {:invoke #(.invoke %),
+                                    :partial clojure.core/partial 
+                                    :error-check (constantly nil)}) ; functions are already compiled, no further checking to do
 
 
-(extend-protocol Invokable
-  clojure.lang.AFn
-  (invoke [f] (.invoke f))
-  (papply [f args] (apply partial f args))
-  (error-check [f] nil) ;;functions are already compiled, no further checking to do
+;; assertions
+(def ^{:dynamic true, :doc "var to hold assertion results, do not use directly"}
+  test-assertions nil)
 
-  clojure.lang.PersistentList
-  (papply [e lbind] `(let ~lbind
-                       ~e))
-  (invoke [e]
-    (binding [*ns* (or (-> e meta :ns) *ns*)]
-      (eval e)))
-  (error-check [e] (eval `(do (fn [] ~e) nil)))
+(defmacro assert* [x message]
+  `(let [v# (Verification. (quote ~x) ~message false)
+         v#  (try+
+              (assert ~x ~message)
+              (assoc v# :pass? true)
+              (catch Object o# (assoc v# :error o#)) )]
+     (swap! test-assertions conj v#)
+     v#))
 
-  clojure.lang.Cons 
-  (papply [e lbind] `(let ~lbind
-                       ~e))
-  (invoke [e]
-    (binding [*ns* (or (-> e meta :ns) *ns*)]
-      (eval e)))
-  (error-check [e] (eval `(do (fn [] ~e) nil))))
-
-(extend-protocol Queueable
-  loom.graph.SimpleDigraph
-  (queue
-    ([g] (graph-alg/bf-traverse g))
-    ([g s] (graph-alg/bf-traverse g s))
-    ([g s f] (graph-alg/bf-traverse g s :f f))))
+(defmacro with-assertions
+  "Collect assertions (called with assert), and return them as a list at the end of body"
+  [& body]
+  `(binding [test-assertions (atom (vector))]
+     ~@body
+     test-assertions))
 
 
-(defn mktest [{:keys [name description steps parameters]}]
-  (let [t (Test. name description steps parameters)]
-    (error-check t)
-    t))
-
-(defmacro deftest [sym m]
-  `(def  ~(with-meta sym {:dynamic true}) (mktest ~m)))
-
-(def all-dd-tests
-  {:t1 {:name "t1", :steps '(println "t1"), :description "test foo"}
-   :t2 {:name "t2", :steps '(println "t2"), :description "test foo"}
-   :t3 {:name "t3", :steps '(println "t3"), :description "test foo"}})
-
-(deftest login {:name "login", :steps '(println "login"), :description "test foo"})
-(deftest create-org {:name "create-org", :steps '(println "create-org"), :description "test foo"})
-(deftest create-prod {:name "create-prod", :steps '(println "create-prod"), :description "test foo"})
-(deftest create-env {:name "create-env", :steps '(println "create-env"), :description "test foo"})
-(deftest promo-empty-prod {:name "promo-empty-prod", :steps '(println "promo-empty-prod"), :description "test foo"})
-(deftest promo-content {:name "promo-content", :steps '(println "promo-content"), :description "test foo"})
-(deftest create-repo {:name "create-repo", :steps '(println "create-repo"), :description "test foo"})
-(deftest sync-repo {:name "sync-repo", :steps '(println "sync-repo"), :description "test foo"})
-
-(defmacro with-bindings-fn "passes all vars in coll thru f and binds the var to new value"
-  [f coll & body]
-  `(with-bindings ~(zipmap coll (for [i coll] `(~f (deref ~i))))
-     ~@body))
-
-(def test-structure
-  (list
-   [:bz-login login]
-   {login [create-org create-prod]}
-   {create-org (conj (vals all-dd-tests) create-env)}
-   {create-env [promo-empty-prod promo-content]}
-   [create-prod create-repo]
-   {create-repo [promo-empty-prod sync-repo]}
-   [:bz-sync sync-repo]
-   [sync-repo promo-content]))
-
-(defn gmap "Walk all the edges ")
-
-(def mytests2
-  (-> (apply graph/digraph
-       test-structure)
-      (attr/add-attr :bz-login :shape :rectangle)
-      (attr/add-attr :bz-sync :shape :rectangle)))
-
-
-
-
-(def testexpr '(+ x y z))
-
+(defmacro defmytest [sym name & body]
+  `(deftest ~sym {:name ~name :steps (quote (with-assertions ~@body))}))
 
 ;; test runner wrappings
-(defn run-test [test]
+
+(defn run-test [{:keys [test]}]
   (invoke test))
+
+(defn wrap-assertions [runner]
+  (fn [req]
+    (with-assertions 
+      (runner req))))
 
 (defn wrap-failures [runner]
   (fn [req]
@@ -127,9 +86,33 @@
      (catch Object _ {:outcome :fail
                       :error &throw-context}))))
 
-(defn run [tests run-params]
-  ((-> run-test
-       wrap-failures)
-   tests (hash-map)))
+(def default-runner
+  (-> run-test
+      wrap-failures))
+
+(defn consume [runner q]
+  (loop [t (.poll q)]
+    (and t (do (runner {:test t})
+               (recur (.poll q))))))
+
+(defn start-testrun [tests & [{:keys [thread-wrapper threads
+                                      watchers reports-ref
+                                      runner]
+                               :or {thread-wrapper identity
+                                    threads 1
+                                    runner default-runner
+                                    watchers {}}}]]
+  (let [testrun-queue (LinkedBlockingQueue.)
+        thread-pool (for [thread-num (range threads)]
+                      (Thread. (-> (partial consume testrun-queue)
+                                   thread-wrapper)
+                               (str "secant_test-thread" thread-num)))]
+    ;;queue all tests
+    (doseq [t tests]
+      (.put testrun-queue t))
+
+    ;;start worker threads
+    (doseq [thread thread-pool] (.start thread))))
 
 (comment (loom.io/view mytests2 :node-label :name))
+(comment (map :name (graph-alg/bf-traverse mytests2)) )
