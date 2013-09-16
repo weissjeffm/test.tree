@@ -148,6 +148,14 @@
 (def ^:dynamic syntax-highlight identity)
 
 
+(defn pst-str-with-fallback
+  "Try to pretty print stacktrace with clj-stacktrace but it's buggy so fall back to standard"[e]
+  (try (clj-stacktrace.repl/pst-str e)
+       (catch Exception ex
+         (let [sw (java.io.StringWriter.)]
+           (.printStackTrace e (java.io.PrintWriter. sw))
+           (.toString sw)))))
+
 (defn testng-report "Produce an xml report consistent with the
                     testng report schema.  Tries to be especially
                     compatible with Jenkins."
@@ -203,7 +211,7 @@
                                      (let [err (-> method-entry error (dissoc :stack-trace)) 
                                            e (exception err)
                                            msg (format-exception-msg method-entry)
-                                           pretty-st (clj-stacktrace.repl/pst-str e)
+                                           pretty-st (pst-str-with-fallback e)
                                            not-empty (fn [s] (and s (-> s .length (> 0))))]
                                        (when (every? not-empty [msg pretty-st])
                                          [:exception {:class (-> e .getClass str)}
