@@ -45,16 +45,19 @@
           (catch Object _ {:result :fail
                            :error &throw-context}))))
 
-
 (defn wrap-data-driven [runner]
   (fn [{{:keys [steps parameters]} :test :as req}]
     (if parameters
-      (let [realized-params (build/realize parameters)]
-        (-> req
-           (assoc :steps (with-meta (fn [] (apply steps realized-params))
-                           (meta steps)))
-           runner
-           (assoc :parameters realized-params)))
+      (let [realized-params (try (build/realize parameters)
+                                 (catch Exception e e))]
+        (if (instance? Throwable realized-params)
+          (runner (assoc req :blocked-by (list {:type ::param-calculation-error
+                                                :error realized-params})))
+          (-> req
+              (assoc :steps (with-meta (fn [] (apply steps realized-params))
+                              (meta steps)))
+              runner
+              (assoc :parameters realized-params))))
       (runner req))))
 
 (defn wrap-blockers [runner]

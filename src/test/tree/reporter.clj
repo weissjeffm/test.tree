@@ -45,12 +45,13 @@
   (= (result testentry) :fail))
 
 (defn execution-time [testentry]
-  (let [r (test-report testentry)
-        start (r :start-time)
-        end (r :end-time)]
-    (if (and start end)
-      (/ (- end start) 1000.0)
-      0)))
+  (if-let [r (test-report testentry)]
+    (let [start (r :start-time)
+          end (r :end-time)]
+      (if (and start end)
+        (/ (- end start) 1000.0)
+        0))
+    0))
 
 ;; Other functions
 
