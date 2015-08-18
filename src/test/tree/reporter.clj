@@ -1,5 +1,5 @@
 (ns test.tree.reporter
-  (:require [hickory.core :as html]
+  (:require [hickory.render :as html]
             [clojure.data.xml :as xml]
             [clojure.set :as sets]
             test.tree.zip)
