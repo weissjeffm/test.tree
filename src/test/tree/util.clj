@@ -1,9 +1,8 @@
 (ns test.tree.util
   (:require [slingshot.slingshot :refer [try+ throw+]]))
 
-;; TODO this should live somewhere else, in testing tools somewhere
 (defmacro ^{:see-also "https://github.com/scgilardi/slingshot"}
-  expecting-error
+  expecting
   "Inverts exception handling. Execute forms, if error is caught
    matching selector, nil is returned. If no error is caught,
    an :success error is thrown. If a non-matching error occurs, the

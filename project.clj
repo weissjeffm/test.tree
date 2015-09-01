@@ -1,4 +1,4 @@
-(defproject test.tree "1.1.0-SNAPSHOT"
+(defproject test.tree "1.1.1-SNAPSHOT"
   :description "A testNG like test harness for clojure"
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [hickory "0.5.4"]
