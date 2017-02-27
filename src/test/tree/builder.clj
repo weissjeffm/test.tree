@@ -173,7 +173,7 @@
   [t n]
   (-> n
      tz/test-zip
-     (zip/append-child (assoc t :blockers (wait-for-tree n)))
+     (zip/append-child (update t :blockers conj (wait-for-tree n)))
      zip/root))
 
 (defn read-tests [f] "Read a file that contains tests"
